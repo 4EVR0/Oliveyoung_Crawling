@@ -353,7 +353,7 @@ class OliveYoungCrawler:
         return False
 
     def get_total_pages(self):
-        """총 페이지 수 확인 (끝 버튼 또는 >> 버튼 확인)"""
+        """총 페이지 수 확인 (끝 버튼 또는 다음 그룹 버튼 확인)"""
         import re
         try:
             # 1. "끝" 버튼에서 마지막 페이지 번호 추출
@@ -377,11 +377,23 @@ class OliveYoungCrawler:
                 except:
                     continue
 
-            # 2. ">>" 버튼이 있으면 10페이지 이상
-            next_group_btn = self.page.locator("a:has-text('>>')").first
-            if next_group_btn.is_visible(timeout=500):
-                print(f"    (>> 버튼 발견, 전체 페이지 순회 모드)")
-                return 999  # go_to_page에서 더 이상 못 갈 때까지 순회
+            # 2. "다음 그룹" 버튼이 있으면 10페이지 이상 (전체 순회 모드)
+            next_group_selectors = [
+                "a:has-text('>>')",
+                "a.next",
+                "a:has-text('다음')",
+                ".pageing a.next",
+                ".paging a.next",
+                "a[class*='next']",
+            ]
+            for selector in next_group_selectors:
+                try:
+                    next_btn = self.page.locator(selector).first
+                    if next_btn.is_visible(timeout=500):
+                        print(f"    (다음 그룹 버튼 발견, 전체 페이지 순회 모드)")
+                        return 999  # go_to_page에서 더 이상 못 갈 때까지 순회
+                except:
+                    continue
 
             # 3. 현재 보이는 페이지 번호 중 최대값
             page_nums = self.page.locator(".pageing a, .paging a").all()
@@ -404,14 +416,17 @@ class OliveYoungCrawler:
 
         for _ in range(max_attempts):
             try:
-                # 1. 현재 그룹에서 해당 페이지 번호 찾기
-                page_link = self.page.locator(
-                    f".pageing a:has-text('{page_num}'), .paging a:has-text('{page_num}')"
-                ).first
-                if page_link.is_visible(timeout=1000):
-                    page_link.click()
-                    time.sleep(2)
-                    return True
+                # 1. 현재 그룹에서 해당 페이지 번호 찾기 (정확한 텍스트 매칭)
+                page_links = self.page.locator(".pageing a, .paging a").all()
+                for link in page_links:
+                    try:
+                        text = link.inner_text().strip()
+                        if text == str(page_num):
+                            link.click()
+                            time.sleep(2)
+                            return True
+                    except:
+                        continue
 
                 # 2. 해당 페이지가 없으면 >> 버튼으로 다음 그룹 이동
                 next_group_selectors = [
@@ -472,7 +487,8 @@ class OliveYoungCrawler:
         return list(dict.fromkeys(product_urls))
 
     def get_all_product_urls(self, main_cat, sub_cat):
-        """모든 페이지에서 상품 URL 수집"""
+        """모든 페이지에서 상품 URL 수집 (URL 파라미터로 페이지 이동)"""
+        import re
         all_urls = []
 
         # 첫 페이지 URL 수집
@@ -480,18 +496,43 @@ class OliveYoungCrawler:
         all_urls.extend(urls)
         print(f"    페이지 1: {len(urls)}개 상품")
 
-        # 총 페이지 수 확인
-        total_pages = self.get_total_pages()
-        print(f"    총 {total_pages} 페이지")
+        if not urls:
+            return all_urls
 
-        # 나머지 페이지 순회
-        for page_num in range(2, total_pages + 1):
-            if self.go_to_page(page_num):
-                urls = self.get_product_urls_from_page()
-                all_urls.extend(urls)
-                print(f"    페이지 {page_num}: {len(urls)}개 상품")
+        # 현재 URL에서 기본 URL 추출
+        current_url = self.page.url
+
+        # 페이지 2부터 순회 (상품이 없을 때까지)
+        page_num = 2
+        max_pages = 100  # 무한루프 방지
+
+        while page_num <= max_pages:
+            # URL에서 pageIdx 파라미터 수정
+            if "pageIdx=" in current_url:
+                next_url = re.sub(r'pageIdx=\d+', f'pageIdx={page_num}', current_url)
             else:
+                separator = "&" if "?" in current_url else "?"
+                next_url = f"{current_url}{separator}pageIdx={page_num}"
+
+            # 페이지 이동
+            try:
+                self.page.goto(next_url, wait_until="networkidle", timeout=30000)
+                time.sleep(1)
+            except Exception as e:
+                print(f"    페이지 {page_num} 이동 실패: {e}")
                 break
+
+            # 상품 URL 수집
+            urls = self.get_product_urls_from_page()
+
+            # 상품이 없으면 종료
+            if not urls:
+                print(f"    페이지 {page_num}: 상품 없음 (마지막 페이지)")
+                break
+
+            all_urls.extend(urls)
+            print(f"    페이지 {page_num}: {len(urls)}개 상품")
+            page_num += 1
 
         all_urls = list(dict.fromkeys(all_urls))
         print(f"    총 {len(all_urls)}개 상품 URL 수집")

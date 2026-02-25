@@ -1,0 +1,24 @@
+# 임시 크롤링 데이터
+temp_crawl/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+venv/
+.venv/
+
+# 크롤링 결과 파일 (필요시 주석 해제)
+# oliveyoung_*.json
+# oliveyoung_*.csv
+# oliveyoung_temp.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

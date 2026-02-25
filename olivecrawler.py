@@ -186,6 +186,23 @@ CATEGORIES = {
     ]
 }
 
+# 담당자별 크롤링 카테고리 (총 20개 서브카테고리 / 4명)
+PERSON_CATEGORIES = {
+    "혁준": {
+        "스킨케어": ["스킨/토너", "에센스/세럼/앰플", "크림", "로션", "미스트/오일"]
+    },
+    "지우": {
+        "마스크팩": ["시트팩", "패드", "페이셜팩", "코팩", "패치"]
+    },
+    "서연": {
+        "클렌징": ["클렌징폼/젤", "오일/밤", "워터/밀크", "필링&스크럽"],
+        "맨즈케어": ["스킨케어"]
+    },
+    "재원": {
+        "더모 코스메틱": ["스킨케어", "바디케어", "클렌징", "선케어", "마스크팩"]
+    }
+}
+
 # 화장품 정보 키워드
 COSMETIC_KEYWORDS = [
     "화장품법", "성분", "제조", "판매", "용량", "중량",
@@ -644,15 +661,18 @@ class OliveYoungCrawler:
         print(f"\n✓ '{main_cat} > {sub_cat}' 완료: {len(category_products)}개 상품")
         return category_products
 
-    def crawl_all_categories(self):
-        """모든 카테고리 크롤링"""
+    def crawl_all_categories(self, target_categories: dict = None):
+        """모든 카테고리 크롤링 (target_categories 지정 시 해당 카테고리만)"""
         all_products = []
         success = True
+
+        # target_categories가 없으면 전체 CATEGORIES 사용
+        categories_to_crawl = target_categories if target_categories else CATEGORIES
 
         self.start_browser()
 
         try:
-            for main_cat, sub_cats in CATEGORIES.items():
+            for main_cat, sub_cats in categories_to_crawl.items():
                 for sub_cat in sub_cats:
                     products = self.crawl_subcategory(main_cat, sub_cat)
                     all_products.extend(products)
@@ -733,19 +753,29 @@ def main():
     parser = argparse.ArgumentParser(description="올리브영 화장품 크롤러")
     parser.add_argument("--s3-bucket", type=str, help="S3 버킷 이름 (없으면 로컬만 저장)")
     parser.add_argument("--headless", action="store_true", default=True, help="헤드리스 모드")
+    parser.add_argument("--person", type=str, choices=["혁준", "지우", "서연", "재원"],
+                        help="담당자 이름 (혁준/지우/서연/재원)")
     args = parser.parse_args()
 
     # 환경변수 또는 인자에서 버킷 이름 가져오기
     s3_bucket = args.s3_bucket or os.environ.get("S3_BUCKET")
 
-    print("=" * 60)
-    print("올리브영 화장품 크롤러")
-    print("=" * 60)
+    # 담당자별 카테고리 선택
+    if args.person:
+        target_categories = PERSON_CATEGORIES[args.person]
+        print("=" * 60)
+        print(f"올리브영 화장품 크롤러 - 담당자: {args.person}")
+        print("=" * 60)
+    else:
+        target_categories = CATEGORIES
+        print("=" * 60)
+        print("올리브영 화장품 크롤러 - 전체 크롤링")
+        print("=" * 60)
 
-    total_subcats = sum(len(subs) for subs in CATEGORIES.values())
-    print(f"크롤링 대상: {len(CATEGORIES)}개 메인 카테고리, {total_subcats}개 서브카테고리")
+    total_subcats = sum(len(subs) for subs in target_categories.values())
+    print(f"크롤링 대상: {len(target_categories)}개 메인 카테고리, {total_subcats}개 서브카테고리")
 
-    for main_cat, sub_cats in CATEGORIES.items():
+    for main_cat, sub_cats in target_categories.items():
         print(f"  {main_cat}: {', '.join(sub_cats)}")
 
     if s3_bucket:
@@ -756,7 +786,7 @@ def main():
     print("=" * 60)
 
     crawler = OliveYoungCrawler(headless=args.headless, s3_bucket=s3_bucket)
-    products = crawler.crawl_all_categories()
+    products = crawler.crawl_all_categories(target_categories=target_categories)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     crawler.save_to_json(products, f"oliveyoung_products_{timestamp}.json")

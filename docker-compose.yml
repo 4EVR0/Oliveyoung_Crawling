@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  crawler:
+    build: .
+    env_file:
+      - .env
+    environment:
+      - S3_BUCKET=${S3_BUCKET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=ap-northeast-2
+      - PERSON=${PERSON}
+    command: ["python", "olivecrawler.py", "--person", "${PERSON}", "--s3-bucket", "${S3_BUCKET}"]
+    volumes:
+      # 크롤링 결과 로컬에 저장
+      - ./output:/app/output
+      # 임시 파일 (재시작 시 복구용)
+      - ./temp_crawl:/app/temp_crawl

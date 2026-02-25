@@ -15,16 +15,13 @@
 ### 1. Docker로 실행 <<권장>>
 
 ```bash
-# 1. 환경변수 파일 생성
-cp .env.example .env
-
-# 2. .env 파일 편집 (본인 정보 입력)
+# 1. .env 파일 편집 (본인 정보 입력)
 # PERSON=your_name
 # S3_BUCKET=your-bucket-name
 # AWS_ACCESS_KEY_ID=your-access-key
 # AWS_SECRET_ACCESS_KEY=your-secret-key
 
-# 3. 빌드 & 실행
+# 2. 빌드 & 실행
 docker-compose up --build
 ```
 

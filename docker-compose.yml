@@ -11,7 +11,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=ap-northeast-2
       - PERSON=${PERSON}
-    command: ["python", "olivecrawler.py", "--person", "${PERSON}", "--s3-bucket", "${S3_BUCKET}"]
+    command: ["--person", "${PERSON}", "--s3-bucket", "${S3_BUCKET}"]
     volumes:
       # 크롤링 결과 로컬에 저장
       - ./output:/app/output

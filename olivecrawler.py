@@ -553,66 +553,44 @@ class OliveYoungCrawler:
             "crawled_at": datetime.now().isoformat(),
         }
 
-        try:
-            self.page.goto(url, wait_until="domcontentloaded", timeout=20000)
-            time.sleep(2)
-            self.close_popups()
-
-            # 상품명 (실제 요소에서 추출)
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                name_selectors = [
-                    ".prd_name",
-                    "p.prd_name",
-                    ".goods_name",
-                    "h1.product-name",
-                    "[class*='product'] [class*='name']",
-                ]
-                for selector in name_selectors:
-                    try:
-                        name_el = self.page.locator(selector).first
-                        if name_el.is_visible(timeout=500):
-                            product["name"] = name_el.inner_text().strip()
-                            break
-                    except:
-                        continue
-                # fallback: title에서 추출
-                if not product["name"]:
-                    title = self.page.title()
-                    if "|" in title:
-                        product["name"] = title.split("|")[0].strip()
-            except:
-                pass
+                # 1. 페이지 이동: 타임아웃을 30초로 늘리고 도메인 로드 대기
+                self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                time.sleep(2) 
+                self.close_popups()
 
-            # 브랜드명
-            try:
-                brand_selectors = [
-                    ".prd_brand",
-                    "p.prd_brand",
-                    ".brand_name",
-                    "[class*='brand']",
-                ]
-                for selector in brand_selectors:
-                    try:
-                        brand_el = self.page.locator(selector).first
-                        if brand_el.is_visible(timeout=500):
-                            product["brand"] = brand_el.inner_text().strip()
-                            break
-                    except:
-                        continue
-            except:
-                pass
+                # 2. 상품명 추출: title()에서 접미사 ' | 올리브영'만 제거
+                try:
+                    raw_title = self.page.title()
+                    if " | 올리브영" in raw_title:
+                        # 오른쪽 끝에서부터 첫 번째 ' | 올리브영'만 제거하여 제품명 내의 '|' 보존
+                        product["name"] = raw_title.rsplit(" | 올리브영", 1)[0].strip()
+                    else:
+                        product["name"] = raw_title.strip()
+                except:
+                    pass
 
-            # 가격
-            try:
-                product["price"] = self.page.locator(".price").first.inner_text().strip()
-            except:
-                pass
+                # 3. 브랜드명 추출
+                try:
+                    product["brand"] = self.page.locator("[class*='brand']").first.inner_text().strip()
+                except:
+                    pass
 
-            # 상품정보제공고시
-            self.get_disclosure_info(product)
+                # 4. 가격 추출
+                try:
+                    product["price"] = self.page.locator(".price").first.inner_text().strip()
+                except:
+                    pass
 
-            if product["name"]:
-                print(f"      ✓ {product['brand']} - {product['name'][:25]}...")
+                # 5. 상품정보제공고시 (전성분 등) 수집
+                self.get_disclosure_info(product)
+
+                # 성공적으로 이름을 가져왔다면 결과 출력 후 루프 탈출
+                if product["name"]:
+                    print(f"      ✓ {product['brand']} - {product['name'][:25]}...")
+                return product
 
             except Exception as e:
                 error_msg = str(e)

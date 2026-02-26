@@ -5,6 +5,11 @@ services:
     build: .
     env_file:
       - .env
+    shm_size: '2gb'      # 공유 메모리를 2GB로 확장 (필수)
+    deploy:
+      resources:
+        limits:
+          memory: 4G    # 컨테이너 전체 메모리 제한 확장
     environment:
       - PYTHONUNBUFFERED=1
       - S3_BUCKET=${S3_BUCKET}

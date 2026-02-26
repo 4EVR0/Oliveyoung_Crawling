@@ -698,7 +698,7 @@ class OliveYoungCrawler:
                 category_products.append(product)
                 # 상품마다 로컬 임시파일에 저장
                 self._save_products_to_temp(main_cat, sub_cat, category_products)
-            time.sleep(0.3)
+            time.sleep(2.5)
 
         print(f"\n✓ '{main_cat} > {sub_cat}' 완료: {len(category_products)}개 상품")
         return category_products

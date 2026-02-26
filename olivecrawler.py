@@ -276,6 +276,7 @@ class OliveYoungCrawler:
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 "--no-sandbox",
+                "--disable-dev-shm-usage", # 공유 메모리 부족 문제 방지
             ]
         )
         self.context = self.browser.new_context(

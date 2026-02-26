@@ -276,6 +276,7 @@ class OliveYoungCrawler:
                 "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 "--no-sandbox",
+                "--disable-dev-shm-usage", # 공유 메모리 부족 문제 방지
             ]
         )
         self.context = self.browser.new_context(
@@ -552,69 +553,56 @@ class OliveYoungCrawler:
             "crawled_at": datetime.now().isoformat(),
         }
 
-        try:
-            self.page.goto(url, wait_until="domcontentloaded", timeout=20000)
-            time.sleep(2)
-            self.close_popups()
-
-            # 상품명 (실제 요소에서 추출)
+        max_retries = 3
+        for attempt in range(max_retries):
             try:
-                name_selectors = [
-                    ".prd_name",
-                    "p.prd_name",
-                    ".goods_name",
-                    "h1.product-name",
-                    "[class*='product'] [class*='name']",
-                ]
-                for selector in name_selectors:
-                    try:
-                        name_el = self.page.locator(selector).first
-                        if name_el.is_visible(timeout=500):
-                            product["name"] = name_el.inner_text().strip()
-                            break
-                    except:
+                # 1. 페이지 이동: 타임아웃을 30초로 늘리고 도메인 로드 대기
+                self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                time.sleep(2) 
+                self.close_popups()
+
+                # 2. 상품명 추출: title()에서 접미사 ' | 올리브영'만 제거
+                try:
+                    raw_title = self.page.title()
+                    if " | 올리브영" in raw_title:
+                        # 오른쪽 끝에서부터 첫 번째 ' | 올리브영'만 제거하여 제품명 내의 '|' 보존
+                        product["name"] = raw_title.rsplit(" | 올리브영", 1)[0].strip()
+                    else:
+                        product["name"] = raw_title.strip()
+                except:
+                    pass
+
+                # 3. 브랜드명 추출
+                try:
+                    product["brand"] = self.page.locator("[class*='brand']").first.inner_text().strip()
+                except:
+                    pass
+
+                # 4. 가격 추출
+                try:
+                    product["price"] = self.page.locator(".price").first.inner_text().strip()
+                except:
+                    pass
+
+                # 5. 상품정보제공고시 (전성분 등) 수집
+                self.get_disclosure_info(product)
+
+                # 성공적으로 이름을 가져왔다면 결과 출력 후 루프 탈출
+                if product["name"]:
+                    print(f"      ✓ {product['brand']} - {product['name'][:25]}...")
+                return product
+
+            except Exception as e:
+                error_msg = str(e)
+                # 접속 거부 또는 타임아웃 발생 시 대기 후 재시도
+                if "ERR_CONNECTION_REFUSED" in error_msg or "Timeout" in error_msg:
+                    if attempt < max_retries - 1:
+                        print(f"      ⚠️ 접속 오류 (시도 {attempt+1}/{max_retries}): 10초 후 재시도...")
+                        time.sleep(10) 
                         continue
-                # fallback: title에서 추출
-                if not product["name"]:
-                    title = self.page.title()
-                    if "|" in title:
-                        product["name"] = title.split("|")[0].strip()
-            except:
-                pass
-
-            # 브랜드명
-            try:
-                brand_selectors = [
-                    ".prd_brand",
-                    "p.prd_brand",
-                    ".brand_name",
-                    "[class*='brand']",
-                ]
-                for selector in brand_selectors:
-                    try:
-                        brand_el = self.page.locator(selector).first
-                        if brand_el.is_visible(timeout=500):
-                            product["brand"] = brand_el.inner_text().strip()
-                            break
-                    except:
-                        continue
-            except:
-                pass
-
-            # 가격
-            try:
-                product["price"] = self.page.locator(".price").first.inner_text().strip()
-            except:
-                pass
-
-            # 상품정보제공고시
-            self.get_disclosure_info(product)
-
-            if product["name"]:
-                print(f"      ✓ {product['brand']} - {product['name'][:25]}...")
-
-        except Exception as e:
-            print(f"      ✗ 크롤링 실패: {str(e)[:40]}")
+                
+                print(f"      ✗ 크롤링 최종 실패: {error_msg[:40]}")
+                break
 
         return product
 
@@ -697,7 +685,7 @@ class OliveYoungCrawler:
                 category_products.append(product)
                 # 상품마다 로컬 임시파일에 저장
                 self._save_products_to_temp(main_cat, sub_cat, category_products)
-            time.sleep(0.3)
+            time.sleep(2.5)
 
         print(f"\n✓ '{main_cat} > {sub_cat}' 완료: {len(category_products)}개 상품")
         return category_products
@@ -715,7 +703,16 @@ class OliveYoungCrawler:
         try:
             for main_cat, sub_cats in categories_to_crawl.items():
                 for sub_cat in sub_cats:
-                    products = self.crawl_subcategory(main_cat, sub_cat)
+                    try:
+                        products = self.crawl_subcategory(main_cat, sub_cat)
+                    except Exception as e:
+                        # 'Page crashed' 또는 'Target page, context or browser has been closed' 에러 대응
+                        if "crashed" in str(e).lower() or "closed" in str(e).lower():
+                            print("  ⚠️ 브라우저 크래시 감지. 브라우저를 재시작합니다.")
+                            self.close_browser()
+                            time.sleep(5)
+                            self.start_browser()
+                            # 재시작 후 현재 카테고리 다시 시도
                     all_products.extend(products)
 
                     # S3 업로드 (활성화된 경우)

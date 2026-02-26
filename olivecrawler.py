@@ -614,8 +614,17 @@ class OliveYoungCrawler:
             if product["name"]:
                 print(f"      ✓ {product['brand']} - {product['name'][:25]}...")
 
-        except Exception as e:
-            print(f"      ✗ 크롤링 실패: {str(e)[:40]}")
+            except Exception as e:
+                error_msg = str(e)
+                # 접속 거부 또는 타임아웃 발생 시 대기 후 재시도
+                if "ERR_CONNECTION_REFUSED" in error_msg or "Timeout" in error_msg:
+                    if attempt < max_retries - 1:
+                        print(f"      ⚠️ 접속 오류 (시도 {attempt+1}/{max_retries}): 10초 후 재시도...")
+                        time.sleep(10) 
+                        continue
+                
+                print(f"      ✗ 크롤링 최종 실패: {error_msg[:40]}")
+                break
 
         return product
 

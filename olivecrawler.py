@@ -716,7 +716,16 @@ class OliveYoungCrawler:
         try:
             for main_cat, sub_cats in categories_to_crawl.items():
                 for sub_cat in sub_cats:
-                    products = self.crawl_subcategory(main_cat, sub_cat)
+                    try:
+                        products = self.crawl_subcategory(main_cat, sub_cat)
+                    except Exception as e:
+                        # 'Page crashed' 또는 'Target page, context or browser has been closed' 에러 대응
+                        if "crashed" in str(e).lower() or "closed" in str(e).lower():
+                            print("  ⚠️ 브라우저 크래시 감지. 브라우저를 재시작합니다.")
+                            self.close_browser()
+                            time.sleep(5)
+                            self.start_browser()
+                            # 재시작 후 현재 카테고리 다시 시도
                     all_products.extend(products)
 
                     # S3 업로드 (활성화된 경우)

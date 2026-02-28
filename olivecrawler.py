@@ -558,52 +558,48 @@ class OliveYoungCrawler:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                # 1. 페이지 이동: 타임아웃을 30초로 늘리고 도메인 로드 대기
+                # 브라우저/페이지 객체가 유효한지 체크
+                if not self.page or self.page.is_closed():
+                    raise Exception("Browser is closed or page is missing")
+
                 self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
                 time.sleep(2) 
                 self.close_popups()
 
-                # 2. 상품명 추출: title()에서 접미사 ' | 올리브영'만 제거
-                try:
-                    raw_title = self.page.title()
-                    if " | 올리브영" in raw_title:
-                        # 오른쪽 끝에서부터 첫 번째 ' | 올리브영'만 제거하여 제품명 내의 '|' 보존
-                        product["name"] = raw_title.rsplit(" | 올리브영", 1)[0].strip()
-                    else:
-                        product["name"] = raw_title.strip()
-                except:
-                    pass
+                raw_title = self.page.title()
+                if " | 올리브영" in raw_title:
+                    product["name"] = raw_title.rsplit(" | 올리브영", 1)[0].strip()
+                else:
+                    product["name"] = raw_title.strip()
 
-                # 3. 브랜드명 추출
                 try:
                     product["brand"] = self.page.locator("[class*='brand']").first.inner_text().strip()
-                except:
-                    pass
+                except: pass
 
-                # 4. 가격 추출
                 try:
                     product["price"] = self.page.locator(".price").first.inner_text().strip()
-                except:
-                    pass
+                except: pass
 
-                # 5. 상품정보제공고시 (전성분 등) 수집
                 self.get_disclosure_info(product)
 
-                # 성공적으로 이름을 가져왔다면 결과 출력 후 루프 탈출
                 if product["name"]:
                     print(f"      ✓ {product['brand']} - {product['name'][:25]}...")
                 return product
 
             except Exception as e:
                 error_msg = str(e)
-                # 접속 거부 또는 타임아웃 발생 시 대기 후 재시도
-                if "ERR_CONNECTION_REFUSED" in error_msg or "Timeout" in error_msg:
+                # 브라우저 크래시나 종료 에러인 경우, 루프를 중단하지 말고 예외를 던져야 함
+                if "crashed" in error_msg.lower() or "closed" in error_msg.lower() or "context" in error_msg.lower():
+                    print(f"      🚨 브라우저 치명적 에러 감지: {error_msg}")
+                    raise e # 상위 crawl_subcategory로 에러 전달
+
+                if "Timeout" in error_msg or "ERR_CONNECTION" in error_msg:
                     if attempt < max_retries - 1:
-                        print(f"      ⚠️ 접속 오류 (시도 {attempt+1}/{max_retries}): 10초 후 재시도...")
-                        time.sleep(10) 
+                        print(f"      ⚠️ 접속 지연 (시도 {attempt+1}/{max_retries}): 재시도 중...")
+                        time.sleep(5)
                         continue
                 
-                print(f"      ✗ 크롤링 최종 실패: {error_msg[:40]}")
+                print(f"      ✗ 크롤링 실패: {error_msg[:40]}")
                 break
 
         return product
@@ -693,17 +689,34 @@ class OliveYoungCrawler:
         total = len(remaining_urls)
 
         # 각 상품 상세 정보 크롤링
-        for i, url in enumerate(remaining_urls, 1):
-            print(f"    [{i}/{total}] 크롤링 중...")
-            product = self.get_product_detail(url, main_cat, sub_cat)
+        i = 0
+        while i < len(remaining_urls):
+            url = remaining_urls[i]
+            print(f"    [{i+1}/{total}] 수집 중... {url[-15:]}")
             
-            if product and product.get("name"):
-                category_products.append(product)
-                # 상품마다 로컬 임시파일(상세 정보 결과물)에 저장
-                self._save_products_to_temp(main_cat, sub_cat, category_products)
-            
-            time.sleep(2.5)
+            try:
+                # 브라우저가 없거나 페이지가 죽었으면 다시 시작
+                if not self.browser:
+                    self.start_browser()
 
+                product = self.get_product_detail(url, main_cat, sub_cat)
+                
+                if product and product.get("name"):
+                    category_products.append(product)
+                    self._save_products_to_temp(main_cat, sub_cat, category_products)
+                
+                i += 1 # 성공 시 다음 상품으로
+                time.sleep(2.5)
+
+            except Exception as e:
+                # Page crashed 등이 발생했을 때 여기서 잡아서 복구함
+                print(f"    🚨 루프 내 복구 로직 가동: {str(e)[:50]}")
+                self.close_browser() # 죽은 브라우저 강제 종료
+                time.sleep(5)
+                self.start_browser() # 새 브라우저 시작
+                # i를 증가시키지 않으므로, 새 브라우저로 같은 URL 다시 시도
+                print(f"    ♻️ 브라우저 재시작 완료. 현재 상품부터 다시 시도합니다.")
+                
         print(f"\n✓ '{main_cat} > {sub_cat}' 완료: {len(category_products)}개 상품")
         return category_products
 

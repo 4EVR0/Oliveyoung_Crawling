@@ -3,6 +3,7 @@
 
 # 임시 크롤링 데이터
 temp_crawl/
+temp_review_crawl/
 
 # Python
 __pycache__/
@@ -12,10 +13,13 @@ __pycache__/
 venv/
 .venv/
 
-# 크롤링 결과 파일 (필요시 주석 해제)
-# oliveyoung_*.json
-# oliveyoung_*.csv
-# oliveyoung_temp.json
+# 크롤링 결과/중간 파일
+oliveyoung_temp.json
+review_stats_temp.json
+oliveyoung_products_*.json
+oliveyoung_products_*.csv
+review_stats_*.json
+review_stats_*.csv
 
 # IDE
 .idea/

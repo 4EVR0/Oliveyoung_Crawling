@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  review-crawler:
+    build: .
+    env_file:
+      - .env
+    shm_size: '2gb'
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PERSON=${PERSON}
+    command: ["--person", "${PERSON}", "--headless"]
+    volumes:
+      - ./output:/app/output
+      - ./temp_review_crawl:/app/temp_review_crawl

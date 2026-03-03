@@ -15,6 +15,7 @@ from io import BytesIO
 from datetime import datetime
 from typing import Optional
 from playwright.sync_api import sync_playwright
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 # 임시 저장 디렉토리
 TEMP_DIR = "temp_crawl"
@@ -31,6 +32,23 @@ class S3Uploader:
 
     PART_SIZE = 100  # 한 part 파일당 최대 상품 수
 
+    def _canonicalize_goods_url(self, url: str) -> str:
+        """
+        올리브영 상세 URL에서 goodsNo만 남겨서 정규화
+        (t_number 같은 추적 파라미터로 인해 URL이 매번 달라지는 문제 해결)
+        """
+        try:
+            parsed = urlparse(url)
+            qs = parse_qs(parsed.query)
+            goods_no = (qs.get("goodsNo") or [None])[0]
+            if not goods_no:
+                return url
+
+            new_query = urlencode({"goodsNo": goods_no})
+            return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", new_query, ""))
+        except Exception:
+            return url
+
     def __init__(self, bucket: str, run_id: Optional[str] = None):
         self.s3 = boto3.client("s3")
         self.bucket = bucket
@@ -44,6 +62,7 @@ class S3Uploader:
             "parts": []
         }
         self._buffer = {}  # {(main_cat, sub_cat): [products]}
+
 
     def _make_prefix(self, main_cat: str, sub_cat: str) -> str:
         """category/subcategory/run_id 기반 S3 prefix 생성"""
@@ -215,6 +234,23 @@ class OliveYoungCrawler:
     BASE_URL = "https://www.oliveyoung.co.kr"
     CATEGORY_URL = "https://www.oliveyoung.co.kr/store/display/getMCategoryList.do"
 
+    def _canonicalize_goods_url(self, url: str) -> str:
+        """
+        올리브영 상세 URL에서 goodsNo만 남겨서 정규화
+        (t_number 같은 추적 파라미터로 인해 URL이 매번 달라지는 문제 해결)
+        """
+        try:
+            parsed = urlparse(url)
+            qs = parse_qs(parsed.query)
+            goods_no = (qs.get("goodsNo") or [None])[0]
+            if not goods_no:
+                return url
+
+            new_query = urlencode({"goodsNo": goods_no})
+            return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", new_query, ""))
+        except Exception:
+            return url
+
     def __init__(self, headless=True, s3_bucket: Optional[str] = None):
         self.headless = headless
         self.browser = None
@@ -237,6 +273,24 @@ class OliveYoungCrawler:
         safe_sub = sub_cat.replace(" ", "_").replace("/", "-")
         return os.path.join(TEMP_DIR, f"{safe_main}_{safe_sub}.json")
 
+    def _get_done_file_path(self, main_cat: str, sub_cat: str) -> str:
+        safe_main = main_cat.replace(" ", "_").replace("/", "-")
+        safe_sub = sub_cat.replace(" ", "_").replace("/", "-")
+        return os.path.join(TEMP_DIR, f"{safe_main}_{safe_sub}.done")
+    
+    def _is_done(self, main_cat: str, sub_cat: str) -> bool:
+        return os.path.exists(self._get_done_file_path(main_cat, sub_cat))
+
+    def _mark_done(self, main_cat: str, sub_cat: str):
+        path = self._get_done_file_path(main_cat, sub_cat)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(datetime.now().isoformat())
+
+    def _clear_done(self, main_cat: str, sub_cat: str):
+        path = self._get_done_file_path(main_cat, sub_cat)
+        if os.path.exists(path):
+            os.remove(path)
+
     def _save_products_to_temp(self, main_cat: str, sub_cat: str, products: list):
         """상품 리스트 전체를 임시 파일에 저장"""
         temp_path = self._get_temp_file_path(main_cat, sub_cat)
@@ -250,6 +304,9 @@ class OliveYoungCrawler:
             try:
                 with open(temp_path, "r", encoding="utf-8") as f:
                     products = json.load(f)
+                    for p in products:
+                        if p.get("url"):
+                            p["url"] = self._canonicalize_goods_url(p["url"])
                     print(f"    📂 임시파일에서 {len(products)}개 상품 복구")
                     return products
             except:
@@ -258,7 +315,8 @@ class OliveYoungCrawler:
 
     def _get_crawled_urls(self, products: list) -> set:
         """이미 크롤링된 상품 URL 목록 반환"""
-        return {p.get("url") for p in products if p.get("url")}
+        # ✅ URL 문자열이 아니라 "정규화된(goodsNo만 남긴) URL" 기준으로 비교
+        return {self._canonicalize_goods_url(p.get("url")) for p in products if p.get("url")}
 
     def _clear_temp_file(self, main_cat: str, sub_cat: str):
         """서브카테고리 완료 후 임시 파일 삭제"""
@@ -294,8 +352,9 @@ class OliveYoungCrawler:
         """브라우저 종료"""
         if self.browser:
             self.browser.close()
+        if getattr(self, "playwright", None):
             self.playwright.stop()
-            print("브라우저 종료")
+        self.browser = self.context = self.page = None
 
     def close_popups(self):
         """팝업 닫기"""
@@ -480,6 +539,7 @@ class OliveYoungCrawler:
                         if href and "getGoodsDetail" in href:
                             if not href.startswith("http"):
                                 href = self.BASE_URL + href
+                            href = self._canonicalize_goods_url(href)
                             product_urls.append(href)
                     except:
                         pass
@@ -514,6 +574,8 @@ class OliveYoungCrawler:
         
         current_url = self.page.url
         page_num = 2
+
+        prev_page_urls = None
         
         while page_num <= 100:
             next_url = re.sub(r'pageIdx=\d+', f'pageIdx={page_num}', current_url) if "pageIdx=" in current_url else f"{current_url}&pageIdx={page_num}"
@@ -521,10 +583,19 @@ class OliveYoungCrawler:
                 self.page.goto(next_url, wait_until="networkidle", timeout=30000)
                 time.sleep(1)
                 new_urls = self.get_product_urls_from_page()
-                if not new_urls: break
+                if not new_urls: 
+                    break
+                
+                # ✅ 추가: 같은 URL 목록이 반복되면(페이지Idx가 안 먹히는 경우) 중단
+                if prev_page_urls == new_urls:
+                    print(f"    ⚠️ pageIdx={page_num}: 동일 페이지 반복 감지 → URL 수집 중단")
+                    break
+                prev_page_urls = new_urls
+
                 all_urls.extend(new_urls)
                 page_num += 1
-            except: break
+            except: 
+                break
 
         all_urls = list(dict.fromkeys(all_urls))
         
@@ -544,7 +615,7 @@ class OliveYoungCrawler:
     def get_product_detail(self, url, main_cat, sub_cat):
         """상품 상세 정보 크롤링"""
         product = {
-            "url": url,
+            "url": self._canonicalize_goods_url(url),
             "main_category": main_cat,
             "sub_category": sub_cat,
             "name": "",
@@ -641,10 +712,23 @@ class OliveYoungCrawler:
             pass
 
     def crawl_subcategory(self, main_cat, sub_cat):
+
         """서브카테고리의 모든 상품 크롤링 (중간 저장 지원)"""
         print(f"\n{'='*60}")
         print(f"크롤링: {main_cat} > {sub_cat}")
         print(f"{'='*60}")
+
+        # ✅ 이미 완료(done)면 스킵하되, cached가 비면 done을 해제하고 재수집
+        if self._is_done(main_cat, sub_cat):
+            print(f"✅ 이미 완료된 카테고리 스킵: {main_cat} > {sub_cat}")
+            cached = self._load_temp_products(main_cat, sub_cat)
+
+            # ✅ 방어: done인데 캐시가 비어있으면 done을 지우고 다시 크롤링
+            if not cached:
+                print(f"    ⚠️ done 파일은 있는데 cached가 비어있음 → done 해제 후 재수집합니다.")
+                self._clear_done(main_cat, sub_cat)
+            else:
+                return cached, []
 
         # 1. 파일 경로 정의 (get_all_product_urls와 동일한 규칙)
         safe_main = main_cat.replace("/", "-")
@@ -654,6 +738,8 @@ class OliveYoungCrawler:
         # 2. 기존 크롤링 데이터 로드 (상세 정보 수집 완료분 복구)
         category_products = self._load_temp_products(main_cat, sub_cat)
         crawled_urls = self._get_crawled_urls(category_products)
+        new_products = []  # ✅ 이번 실행에서 새로 수집한 것만
+
         if crawled_urls:
             print(f"    ♻️  이전에 {len(crawled_urls)}개 상품 크롤링됨, 이어서 진행")
 
@@ -670,18 +756,18 @@ class OliveYoungCrawler:
             
             if not self.navigate_to_subcategory(main_cat, sub_cat):
                 print(f"  '{sub_cat}' 카테고리를 찾을 수 없습니다.")
-                return category_products
+                return category_products, []
             
             # 페이지네이션을 돌며 URL 수집 및 파일 저장
             product_urls = self.get_all_product_urls(main_cat, sub_cat)
 
         if not product_urls:
             print(f"  상품이 없습니다.")
-            return category_products
+            return category_products, []
 
         # 4. 상세 정보 크롤링 진행
         # 이미 크롤링된 URL 제외
-        remaining_urls = [url for url in product_urls if url not in crawled_urls]
+        remaining_urls = [self._canonicalize_goods_url(url) for url in product_urls if self._canonicalize_goods_url(url) not in crawled_urls]
         skipped = len(product_urls) - len(remaining_urls)
         if skipped > 0:
             print(f"    ⏭️  {skipped}개 상품 스킵 (이미 상세 정보 수집됨)")
@@ -703,6 +789,7 @@ class OliveYoungCrawler:
                 
                 if product and product.get("name"):
                     category_products.append(product)
+                    new_products.append(product)
                     self._save_products_to_temp(main_cat, sub_cat, category_products)
                 
                 i += 1 # 성공 시 다음 상품으로
@@ -718,7 +805,13 @@ class OliveYoungCrawler:
                 print(f"    ♻️ 브라우저 재시작 완료. 현재 상품부터 다시 시도합니다.")
                 
         print(f"\n✓ '{main_cat} > {sub_cat}' 완료: {len(category_products)}개 상품")
-        return category_products
+
+        #✅ 완료 처리 (반드시 return 전에!)
+        self._mark_done(main_cat, sub_cat)
+        # 완료 후 임시파일 정리(선택)
+        # self._clear_temp_file(main_cat, sub_cat)
+
+        return category_products, new_products
 
     def crawl_all_categories(self, target_categories: dict = None):
         """모든 카테고리 크롤링 (변수 미선언 오류 및 에러 복구 강화)"""
@@ -734,17 +827,20 @@ class OliveYoungCrawler:
                 products = [] 
                 try:
                     # 크롤링 실행 (내부에서 임시 파일 복구 로직 포함)
-                    products = self.crawl_subcategory(main_cat, sub_cat)
-                    
-                    if products:
+                    products, new_products = self.crawl_subcategory(main_cat, sub_cat)
+
+                    # ✅ 누적: 새로 수집한 게 있으면 new_products, 아니면 products(캐시/완료분)
+                    if new_products:
+                        all_products.extend(new_products)
+                    elif products:
                         all_products.extend(products)
-                        
-                        # 2. S3 업로드 로직 (try 블록 내부에서 실행)
-                        if self.s3_uploader:
-                            self.s3_uploader.add_products(main_cat, sub_cat, products)
-                            self.s3_uploader.flush_category(main_cat, sub_cat)
-                            self.s3_uploader.save_checkpoint()
-                            self._clear_temp_file(main_cat, sub_cat)
+
+                    # ✅ S3 업로드는 new_products만
+                    if self.s3_uploader and new_products:
+                        self.s3_uploader.add_products(main_cat, sub_cat, new_products)
+                        self.s3_uploader.flush_category(main_cat, sub_cat)
+                        self.s3_uploader.save_checkpoint()
+                        #self._clear_temp_file(main_cat, sub_cat)
                             
                 except Exception as e:
                     # 에러가 나더라도 'products'에 담긴 데이터(복구분 등)는 최대한 보존

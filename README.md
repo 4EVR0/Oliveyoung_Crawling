@@ -1,91 +1,120 @@
-# 올리브영 화장품 크롤러
+# 🛍️ 프로젝트 이름
 
-올리브영 베스트 화장품 정보를 크롤링하여 S3에 저장합니다.
+> 한 줄 소개 : 올리브영 화장품 데이터 기반 GraphRAG 추천 시스템
 
-## 담당자별 분담
+---
 
-| 담당자 | 메인 카테고리 | 서브카테고리 (총 20개) |
-|--------|--------------|----------------------|
-| **혁준** | 스킨케어 | 스킨/토너, 에센스/세럼/앰플, 크림, 로션, 미스트/오일 (5개) |
-| **지우** | 마스크팩 | 시트팩, 패드, 페이셜팩, 코팩, 패치 (5개) |
-| **서연** | 클렌징 + 맨즈케어 | 클렌징폼/젤, 오일/밤, 워터/밀크, 필링&스크럽, 스킨케어 (5개) |
-| **재원** | 더모 코스메틱 | 스킨케어, 바디케어, 클렌징, 선케어, 마스크팩 (5개) |
+## 📌 프로젝트 소개
 
-## 실행 방법
-### 1. Docker로 실행 <<권장>>
+<!-- 이게 뭔지, 왜 만들었는지 -->
+
+**어떤 프로젝트인가요?**
+올리브영 베스트 카테고리의 화장품 정보(상품명, 가격, 브랜드, 순위 등)를 자동으로 수집합니다.
+
+**왜 만들었나요?**
+- 수작업으로 수집하던 화장품 트렌드 데이터를 자동화하기 위해
+- 수집된 데이터를 S3에 적재하여 이후 분석 파이프라인에 활용하기 위해
+
+---
+
+## 🛠️ 기술 스택
+
+| 분류 | 사용 기술 |
+|------|----------|
+| 크롤링 | Playwright |
+| 언어 | Python 3.12 |
+| 컴퓨팅 서버 | AWS EC2 |
+| 스토리지 | AWS S3 (boto3) |
+| 테이블 포맷 | Apache Iceberg |
+| 메타데이터 서버 | --- |
+| 컨테이너 | Docker, Docker Compose |
+
+---
+
+## 🏗️ 아키텍처
+
+```
+[올리브영 웹사이트]
+        ↓  Playwright로 크롤링
+[olivecrawler.py]
+        ↓  JSON 변환
+[AWS S3]
+└── oliveyoung/
+    └── {카테고리}/
+        └── {서브카테고리}/
+            └── run_id={날짜}/
+                └── part_XXXX.json
+```
+
+---
+
+## ⚙️ 설치 및 실행
+
+### 요구사항
+
+- Python 3.12 (3.13 미지원 — greenlet 호환성 문제)
+- Docker 
+- AWS 계정 및 S3 버킷
+
+### 빠른 시작 (Docker 권장)
 
 ```bash
-# 1. .env 파일 편집 (본인 정보 입력)
-# PERSON=your_name
-# S3_BUCKET=your-bucket-name
-# AWS_ACCESS_KEY_ID=your-access-key
-# AWS_SECRET_ACCESS_KEY=your-secret-key
+# 1. 레포지토리 클론
+git clone https://github.com/your-org/your-repo.git
+cd your-repo
 
-# 2. 빌드 & 실행
+# 2. .env 파일 설정
+cp .env.example .env
+# .env 파일을 열어 본인 정보 입력
+
+# 3. 실행
 docker-compose up --build
 ```
 
-`.env` 파일 예시:
-```env
-PERSON=지우
-S3_BUCKET=oliveyoung-crawl-data
-AWS_ACCESS_KEY_ID=AKIA...
-AWS_SECRET_ACCESS_KEY=...
-AWS_DEFAULT_REGION=ap-northeast-2
-```
-
-
-### 2. 로컬에서 담당자별로 실행
+### 로컬 실행
 
 ```bash
-# 의존성 설치 (최초 1회)
+
+# 가상환경 생성 (최초 1회)
+python3 -m venv .venv
+
+# 활성화
+source .venv/bin/activate
+
+# 설치
 pip install -r requirements.txt
 playwright install chromium
 
-# 본인 이름으로 실행
-python olivecrawler.py --person 혁준 --s3-bucket oliveyoung-crawl-data
-python olivecrawler.py --person 지우 --s3-bucket oliveyoung-crawl-data
-python olivecrawler.py --person 서연 --s3-bucket oliveyoung-crawl-data
-python olivecrawler.py --person 재원 --s3-bucket oliveyoung-crawl-data
+python olivecrawler.py --person 이름 --s3-bucket your-bucket-name
 ```
 
+> 자세한 실행 방법은 [RUNBOOK.md](./docs/RUNBOOK.md)를 참고하세요.
 
-### 3. 전체 크롤링 (--person 없이)
+---
 
-```bash
-# 전체 카테고리 크롤링
-python olivecrawler.py --s3-bucket your-bucket-name
-```
+## 🤝 기여 방법
 
-## 크롤링 대상
+1. 이 레포지토리를 Fork 합니다
+2. 새 브랜치를 생성합니다 (`git checkout -b feat/기능명`)
+3. 변경사항을 커밋합니다 (`git commit -m "feat: 기능 설명"`)
+4. 브랜치에 Push 합니다 (`git push origin feat/기능명`)
+5. Pull Request를 생성합니다
 
-| 메인 카테고리 | 서브 카테고리 |
-|--------------|--------------|
-| 스킨케어 | 스킨/토너, 에센스/세럼/앰플, 크림, 로션, 미스트/오일 |
-| 마스크팩 | 시트팩, 패드, 페이셜팩, 코팩, 패치 |
-| 클렌징 | 클렌징폼/젤, 오일/밤, 워터/밀크, 필링&스크럽 |
-| 더모 코스메틱 | 스킨케어, 바디케어, 클렌징, 선케어, 마스크팩 |
-| 맨즈케어 | 스킨케어 |
+---
 
-## S3 저장 구조
+## 📄 라이센스
 
 ```
-s3://bucket-name/
-└── oliveyoung/
-    ├── 스킨케어/
-    │   └── 스킨-토너/
-    │       └── run_id=20260225_093000/
-    │           ├── part_0000.json (100개)
-    │           ├── part_0001.json (100개)
-    │           └── part_0002.json (나머지)
-    └── _manifests/
-        └── run_id=20260225_093000/
-            └── manifest.json
+MIT License — 자유롭게 사용, 수정, 배포 가능
 ```
 
-## 기능
+---
 
-- 페이지네이션 자동 처리 (16페이지 이상 지원)
-- 중간에 끊겨도 재시작 시 이어서 크롤링
-- S3 업로드 실패 시 자동 재시도 (최대 3회)
-- 서브카테고리별 체크포인트 저장
+## 👥 팀원
+
+| 이름 | 역할 |
+|------|------|
+| 혁준 | 팀장, 스킨케어 크롤링 |
+| 지우 | 마스크팩 크롤링 |
+| 서연 | 클렌징 / 맨즈케어 크롤링 |
+| 재원 | 더모 코스메틱 크롤링 |

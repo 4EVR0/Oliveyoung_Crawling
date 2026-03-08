@@ -7,18 +7,19 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Playwright 브라우저 설치
-RUN playwright install chromium
-
-# 소스 코드 복사
-COPY olivecrawler.py .
+# 소스 코드 복사 (디렉토리 구조 전체)
+COPY config/   ./config/
+COPY crawler/  ./crawler/
+COPY storage/  ./storage/
+COPY main.py   .
 
 # 임시 저장 디렉토리 생성
 RUN mkdir -p temp_crawl
 
-# 환경변수 (S3 버킷은 실행 시 지정)
+# 환경변수
 ENV S3_BUCKET=""
 ENV AWS_DEFAULT_REGION="ap-northeast-2"
+ENV PERSON=""
 
-# 실행
-ENTRYPOINT ["python", "olivecrawler.py"]
+# 실행 (olivecrawler.py → main.py)
+ENTRYPOINT ["python", "main.py"]

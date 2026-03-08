@@ -31,11 +31,14 @@ def run_crawl(
     target_categories: dict,
     s3_bucket: Optional[str],
     headless: bool,
-    run_id: str,
+    person : str = None,
 ):
     """카테고리 딕셔너리를 받아 전체 크롤링을 수행하고 상품 목록을 반환"""
-    checkpoint = CheckpointManager(run_id=run_id)
-    s3         = S3Uploader(bucket=s3_bucket, run_id=run_id) if s3_bucket else None
+    checkpoint = CheckpointManager(person = person)
+    s3 = S3Uploader(
+        bucket=s3_bucket,
+        run_id=checkpoint._state["run_id"]  # checkpoint 에서 자동으로 가져옴
+        ) if s3_bucket else None
     browser    = BrowserManager(headless=headless)
     browser.start()
 
@@ -104,7 +107,6 @@ def main():
                         choices=list(PERSON_CATEGORIES.keys()) + [""],
                         help="담당자 이름")
     parser.add_argument("--headless",  action="store_true", default=True)
-    parser.add_argument("--run-id",    default=None, help="재시작 시 동일 run_id 지정")
     args = parser.parse_args()
 
     # 대상 카테고리 결정
@@ -115,10 +117,9 @@ def main():
         target = CATEGORIES
         label  = "전체 크롤링"
 
-    run_id = args.run_id or datetime.now().strftime("%Y%m%d_%H%M%S")
 
     print("=" * 60)
-    print(f"올리브영 크롤러 | {label} | run_id={run_id}")
+    print(f"올리브영 크롤러 | {label} ")
     if args.s3_bucket:
         print(f"S3 버킷: {args.s3_bucket}")
     else:
@@ -129,7 +130,7 @@ def main():
         target_categories=target,
         s3_bucket=args.s3_bucket or None,
         headless=args.headless,
-        run_id=run_id,
+        person=args.person,
     )
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")

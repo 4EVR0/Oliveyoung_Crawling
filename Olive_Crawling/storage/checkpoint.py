@@ -33,34 +33,34 @@ import os
 from datetime import datetime
 from config.Settings import TEMP_DIR
 
-
 class CheckpointManager:
 
-    CHECKPOINT_FILE = os.path.join(TEMP_DIR, "checkpoint.json")
-
-    def __init__(self, run_id: str):
-        self.run_id = run_id
+    def __init__(self, person: str = None):
+        os.makedirs(TEMP_DIR, exist_ok=True)
+        self.person = person or "default"
+        self.CHECKPOINT_FILE = os.path.join(TEMP_DIR, f"checkpoint_{self.person}.json")
         self._state = self._load()
-
+        self.save()
     # ------------------------------------------------------------------ #
     #  로드 / 저장
     # ------------------------------------------------------------------ #
 
     def _load(self) -> dict:
-        """기존 체크포인트 파일이 있으면 불러오고, 없으면 초기 상태를 반환"""
-        os.makedirs(TEMP_DIR, exist_ok=True)
+        """기존 체크포인트 파일이 있으면 자동으로 이어받고, 없으면 새로 생성"""
         if os.path.exists(self.CHECKPOINT_FILE):
             try:
                 with open(self.CHECKPOINT_FILE, "r", encoding="utf-8") as f:
                     state = json.load(f)
-                # run_id 가 다르면 새 세션으로 간주
-                if state.get("run_id") == self.run_id:
-                    print(f"📂 체크포인트 복구: run_id={self.run_id}")
-                    return state
+                print(f"📂 체크포인트 복구: run_id={state['run_id']}")
+                return state
             except Exception:
                 pass
+
+        # 없으면 새 run_id 로 생성
+        new_run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        print(f"🆕 새 run_id 생성: {new_run_id}")
         return {
-            "run_id":                  self.run_id,
+            "run_id":                  new_run_id,
             "created_at":              datetime.now().isoformat(),
             "completed_subcategories": [],
             "page_progress":           {},
@@ -71,7 +71,6 @@ class CheckpointManager:
         self._state["last_updated"] = datetime.now().isoformat()
         with open(self.CHECKPOINT_FILE, "w", encoding="utf-8") as f:
             json.dump(self._state, f, ensure_ascii=False, indent=2)
-
     # ------------------------------------------------------------------ #
     #  서브카테고리 단위
     # ------------------------------------------------------------------ #
@@ -91,7 +90,7 @@ class CheckpointManager:
         print(f"  ✅ 체크포인트: '{key}' 완료 기록")
 
     # ------------------------------------------------------------------ #
-    #  페이지 단위  ← 핵심
+    #  페이지 단위  
     # ------------------------------------------------------------------ #
 
     def get_completed_pages(self, main_cat: str, sub_cat: str) -> set[int]:

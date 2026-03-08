@@ -19,7 +19,7 @@ class Navigator:
 
     def go_home(self):
         """올리브영 메인 페이지로 이동"""
-        self.page.goto(BASE_URL, wait_until="networkidle", timeout=60_000)
+        self.page.goto(BASE_URL, wait_until="networkidle", timeout=30_000)
         time.sleep(3)
 
     def go_to_subcategory(self, main_cat: str, sub_cat: str) -> bool:
@@ -63,8 +63,11 @@ class Navigator:
         '끝' 버튼 href → '다음 그룹' 버튼 존재 → 현재 노출 번호 중 최대값 순으로 시도.
         """
         # 1) '끝' 버튼 href 에서 pageIdx 추출
-        for selector in ["a.last", "a:has-text('끝')", "a:has-text('맨끝')",
-                         "a[title*='마지막']", "a[title*='끝']"]:
+        for selector in ["a.last", 
+                         "a:has-text('끝')",
+                         "a:has-text('맨끝')",
+                         "a[title*='마지막']", 
+                         "a[title*='끝']"]:
             try:
                 btn = self.page.locator(selector).first
                 if btn.is_visible(timeout=500):
@@ -78,8 +81,12 @@ class Navigator:
                 continue
 
         # 2) '다음 그룹' 버튼이 보이면 → 순회 모드
-        for selector in ["a:has-text('>>')", "a.next", "a:has-text('다음')",
-                         ".pageing a.next", ".paging a.next", "a[class*='next']"]:
+        for selector in ["a:has-text('>>')", 
+                         "a.next", 
+                         "a:has-text('다음')",
+                         ".pageing a.next", 
+                         ".paging a.next", 
+                         "a[class*='next']"]:
             try:
                 btn = self.page.locator(selector).first
                 if btn.is_visible(timeout=500):

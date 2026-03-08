@@ -74,10 +74,18 @@ docker-compose up --build
 ### 로컬 실행
 
 ```bash
+
+# 가상환경 생성 (최초 1회)
+python3 -m venv .venv
+
+# 활성화
+source .venv/bin/activate
+
+# 설치
 pip install -r requirements.txt
 playwright install chromium
 
-python olivecrawler.py --person 재원 --s3-bucket your-bucket-name
+python olivecrawler.py --person 이름 --s3-bucket your-bucket-name
 ```
 
 > 자세한 실행 방법은 [RUNBOOK.md](./docs/RUNBOOK.md)를 참고하세요.

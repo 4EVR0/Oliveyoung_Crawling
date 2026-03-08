@@ -89,9 +89,8 @@ class ProductFetcher:
     # ------------------------------------------------------------------ #
     #  URL 수집
     # ------------------------------------------------------------------ #
-
     def _get_product_urls(self, main_cat: str, sub_cat: str) -> list[str]:
-        """체크포인트 캐시 → 로컬 파일 → 브라우저 탐색 순으로 URL 목록을 확보"""
+        #"""체크포인트 캐시 → 로컬 파일 → 브라우저 탐색 순으로 URL 목록을 확보"""
         # 체크포인트 캐시
         cached = self.checkpoint.get_cached_urls(main_cat, sub_cat)
         if cached:
@@ -111,6 +110,7 @@ class ProductFetcher:
         page_num   = 1
         prev_urls  = None
 
+
         while page_num <= 100:
             target_url = (
                 re.sub(r"pageIdx=\d+", f"pageIdx={page_num}", current_url)
@@ -119,6 +119,7 @@ class ProductFetcher:
             )
             try:
                 nav.goto_url(target_url)
+
                 new_urls = parser.get_product_urls()
                 if not new_urls or new_urls == prev_urls:
                     break
@@ -132,6 +133,7 @@ class ProductFetcher:
         self.checkpoint.set_cached_urls(main_cat, sub_cat, all_urls)
         print(f"  🔎 URL 수집 완료: {len(all_urls)}개")
         return all_urls
+
 
     # ------------------------------------------------------------------ #
     #  페이지 단위 상세 수집
@@ -189,6 +191,7 @@ class ProductFetcher:
 
         for attempt in range(RETRY_COUNT):
             try:
+                print(f"      ⏳ 상세 페이지 로딩 중... {url[-30:]}")  # ← 추가
                 self.browser.page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
                 time.sleep(2)
                 self.browser.close_popups()

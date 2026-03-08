@@ -21,8 +21,16 @@
 # AWS_ACCESS_KEY_ID=your-access-key
 # AWS_SECRET_ACCESS_KEY=your-secret-key
 
+`.env` 파일 예시:
+```env
+PERSON=지우
+S3_BUCKET=oliveyoung-crawl-data
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+AWS_DEFAULT_REGION=ap-northeast-2
+
 # 2. 빌드 & 실행
-docker-compose up --build
+docker compose up --build
 ```
 
 `.env` 파일 예시:
@@ -43,10 +51,10 @@ pip install -r requirements.txt
 playwright install chromium
 
 # 본인 이름으로 실행
-python olivecrawler.py --person 혁준 --s3-bucket oliveyoung-crawl-data
-python olivecrawler.py --person 지우 --s3-bucket oliveyoung-crawl-data
-python olivecrawler.py --person 서연 --s3-bucket oliveyoung-crawl-data
-python olivecrawler.py --person 재원 --s3-bucket oliveyoung-crawl-data
+python main.py --person 혁준 --s3-bucket oliveyoung-crawl-data
+python main.py --person 지우 --s3-bucket oliveyoung-crawl-data
+python main.py --person 서연 --s3-bucket oliveyoung-crawl-data
+python main.py --person 재원 --s3-bucket oliveyoung-crawl-data
 ```
 
 
@@ -54,7 +62,7 @@ python olivecrawler.py --person 재원 --s3-bucket oliveyoung-crawl-data
 
 ```bash
 # 전체 카테고리 크롤링
-python olivecrawler.py --s3-bucket your-bucket-name
+python main.py --s3-bucket your-bucket-name
 ```
 
 ## 크롤링 대상

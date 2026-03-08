@@ -2,7 +2,8 @@ import re
 import time
 from datetime import datetime
 from playwright.sync_api import Page
-from config.Settings import BASE_URL, COSMETIC_KEYWORDS
+from config.Settings import BASE_URL
+from config.Categories import COSMETIC_KEYWORDS
 from crawler.Utils import canonicalize_goods_url
 
 

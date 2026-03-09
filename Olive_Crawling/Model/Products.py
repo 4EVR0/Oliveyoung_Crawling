@@ -1,3 +1,7 @@
+from datetime import datetime
+from crawler.Utils import canonicalize_goods_url
+
+
 def make_product_dict(url, main_cat, sub_cat) -> dict:
     return {
         "url":           canonicalize_goods_url(url),

@@ -41,16 +41,23 @@ class Parser:
                     href = link.get_attribute("href") or ""
                     if "getGoodsDetail" not in href:
                         continue
-                    if not href.startswith("http"):
+
+                    if href.startswith("javascript:"):
+                        # javascript: href 에서 실제 URL 추출
+                        match = re.search(r"'(https://[^']+)'", href)
+                        if match:
+                            href = match.group(1)
+                        else:
+                            continue  # 추출 실패하면 스킵
+                    elif not href.startswith("http"):
                         href = BASE_URL + href
+
                     urls.append(canonicalize_goods_url(href))
                 except Exception:
                     pass
-            break   # 첫 번째로 매칭된 selector 만 사용
+            break
 
-        # 중복 제거 (순서 유지)
         return list(dict.fromkeys(urls))
-
     # ------------------------------------------------------------------ #
     #  상세 페이지 → 상품 정보 파싱
     # ------------------------------------------------------------------ #
@@ -206,7 +213,6 @@ class Parser:
             for pattern, category, key in REVIEW_PATTERNS:
                 match = re.search(pattern, text)
                 if match:
-                    product[category][key] = f"{match.group(1)}%"
-
+                    product["review_stats"].setdefault(category, {})[key] = f"{match.group(1)}%"
         except Exception as e:
             print(f"      ⚠️ Shadow DOM 추출 실패: {e}")

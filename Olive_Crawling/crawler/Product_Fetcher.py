@@ -70,6 +70,8 @@ class ProductFetcher:
         pages = self._group_urls_by_page(product_urls)
         all_products = []
 
+        time.sleep(3)  # ← 추가: 브라우저 안정화 대기
+
         for page_num, page_urls in pages.items():
             if page_num in completed_pages:
                 print(f"  ⏭️  페이지 {page_num} 스킵 (이미 완료)")
@@ -206,8 +208,6 @@ class ProductFetcher:
                 time.sleep(2)
                 self.browser.close_popups()
                 product = parser.parse_product(url, main_cat, sub_cat)
-                if product.get("name"):
-                    print(f"      ✓ {product.get('brand','')} - {product['name'][:25]}")
                 return product
 
             except Exception as e:

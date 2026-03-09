@@ -1,6 +1,12 @@
 import re
 import time
-from config.Settings import PAGE_TIMEOUT, CRAWL_DELAY, RETRY_COUNT, TEMP_DIR, BASE_URL
+from config.Settings import (
+    PAGE_TIMEOUT,
+    CRAWL_DELAY,
+    RETRY_COUNT,
+    TEMP_DIR,
+    BASE_URL
+)
 from crawler.Browser import BrowserManager
 from crawler.Navigator import Navigator
 from crawler.Parser import Parser

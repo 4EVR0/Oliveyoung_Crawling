@@ -22,7 +22,6 @@ COSMETIC_KEYWORDS = [
     "주의사항", "품질보증", "소비자상담",
 ]
 
-# config/Categories.py 에 추가
 
 REVIEW_PATTERNS = [
     # 피부타입

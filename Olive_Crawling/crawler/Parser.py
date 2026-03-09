@@ -3,7 +3,10 @@ import time
 from datetime import datetime
 from playwright.sync_api import Page
 from config.Settings import BASE_URL
-from config.Categories import COSMETIC_KEYWORDS
+from config.Categories import (
+    COSMETIC_KEYWORDS,
+    REVIEW_PATTERNS
+)
 from crawler.Utils import canonicalize_goods_url
 from Model.Products import make_product_dict
 
@@ -58,6 +61,7 @@ class Parser:
         (페이지 이동은 호출부 ProductFetcher 에서 처리)
         """
         product = make_product_dict(url, main_cat, sub_cat)  
+
         # 상품명 (타이틀에서 ' | 올리브영' 제거)
         raw_title = self.page.title()
         product["name"] = (
@@ -81,6 +85,11 @@ class Parser:
             pass
 
         self._parse_disclosure(product)
+        self._parse_review_stats(product)
+
+        stats_found = bool(product.get("review_stats"))        
+        review_status = "✓" if stats_found else "△"
+        print(f"      {review_status} {product['brand']} - {product['name'][:25]}...")
         return product
 
     # ------------------------------------------------------------------ #
@@ -114,3 +123,90 @@ class Parser:
                         continue
         except Exception:
             pass
+
+    # ------------------------------------------------------------------ #
+    #  내부: 리뷰 통계 파싱
+    # ------------------------------------------------------------------ #
+
+    def _parse_review_stats(self, product: dict):
+        """리뷰&셔터 탭에서 평점, 리뷰수, 피부타입/고민/자극도 통계를 파싱한다."""
+        try:
+            # 리뷰&셔터 탭 클릭
+            review_tab = self.page.locator("button:has-text('리뷰&셔터')").first
+            if review_tab.is_visible(timeout=3_000):
+                review_tab.click()
+                time.sleep(2)
+
+            # 평점 및 리뷰 수
+            try:
+                review_area = self.page.locator("[class*='ReviewArea']").first
+                if review_area.is_visible(timeout=2_000):
+                    area_text = review_area.inner_text()
+                    rating_match = re.search(r'(\d+\.?\d*)', area_text)
+                    if rating_match:
+                        product["rating"] = rating_match.group(1)
+                    count_match = re.search(r'(\d[\d,]*)\s*건', area_text)
+                    if count_match:
+                        product["review_count"] = count_match.group(1).replace(',', '')
+            except Exception:
+                pass
+
+            # 자세히 보기 → Shadow DOM 통계 추출
+            try:
+                detail_btn = self.page.locator("text=자세히 보기").first
+                if detail_btn.is_visible(timeout=3_000):
+                    detail_btn.click()
+                    time.sleep(3)
+                    self._parse_shadow_dom_stats(product)
+
+                    # 팝업 닫기
+                    try:
+                        close_btn = self.page.locator("text=닫기").first
+                        if close_btn.is_visible(timeout=1_000):
+                            close_btn.click()
+                            time.sleep(0.5)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        except Exception:
+            pass
+
+    def _parse_shadow_dom_stats(self, product: dict):
+        """Shadow DOM(oy-review-modal-component) 에서 리뷰 통계 퍼센트를 추출한다."""
+        try:
+            shadow_text = self.page.evaluate("""
+                () => {
+                    function getAllText(element) {
+                        let text = '';
+                        if (element.shadowRoot) {
+                            text += getAllText(element.shadowRoot);
+                        }
+                        for (const child of element.childNodes) {
+                            if (child.nodeType === Node.TEXT_NODE) {
+                                text += child.textContent + ' ';
+                            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                                text += getAllText(child);
+                            }
+                        }
+                        return text;
+                    }
+                    const modal = document.querySelector('oy-review-modal-component');
+                    return modal ? getAllText(modal) : '';
+                }
+            """)
+
+            if not shadow_text:
+                return
+
+            text = re.sub(r'\s+', ' ', shadow_text)
+
+            
+            for pattern, category, key in REVIEW_PATTERNS:
+                match = re.search(pattern, text)
+                if match:
+                    product[category][key] = f"{match.group(1)}%"
+
+        except Exception as e:
+            print(f"      ⚠️ Shadow DOM 추출 실패: {e}")

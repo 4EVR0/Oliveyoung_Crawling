@@ -37,7 +37,9 @@ class ProductFetcher:
     #  공개 인터페이스
     # ------------------------------------------------------------------ #
 
-    def fetch_subcategory(self, main_cat: str, sub_cat: str) -> list[dict]:
+    def fetch_subcategory(self,
+                          main_cat: str, 
+                          sub_cat: str) -> list[dict]:
         """
         서브카테고리 전체 상품을 수집하고 수집된 상품 목록을 반환.
         체크포인트에 따라 완료된 URL 은 건너뛴다.
@@ -67,7 +69,10 @@ class ProductFetcher:
                 print(f"  ⏭️  페이지 {page_num} 스킵 (이미 완료)")
                 continue
 
-            page_products = self._fetch_page_products(page_urls, main_cat, sub_cat, page_num)
+            page_products = self._fetch_page_products(page_urls, 
+                                                      main_cat, 
+                                                      sub_cat, 
+                                                      page_num)
 
             # S3 업로드 성공 후에만 페이지 완료 기록
             if self.s3 and page_products:
@@ -191,7 +196,6 @@ class ProductFetcher:
 
         for attempt in range(RETRY_COUNT):
             try:
-                print(f"      ⏳ 상세 페이지 로딩 중... {url[-30:]}")  # ← 추가
                 self.browser.page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
                 time.sleep(2)
                 self.browser.close_popups()

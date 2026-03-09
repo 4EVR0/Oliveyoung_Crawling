@@ -124,8 +124,11 @@ class Navigator:
 
             # 다음 그룹으로 이동
             moved = False
-            for selector in ["a:has-text('>>')", ".pageing a.next", ".paging a.next",
-                             "a[class*='next']", "a:has-text('다음')"]:
+            for selector in ["a:has-text('>>')", 
+                             ".pageing a.next", 
+                             ".paging a.next",
+                             "a[class*='next']", 
+                             "a:has-text('다음')"]:
                 try:
                     btn = self.page.locator(selector).first
                     if btn.is_visible(timeout=500):

@@ -21,3 +21,6 @@ def canonicalize_goods_url(url: str) -> str:
 def safe_name(text: str) -> str:
     """카테고리명을 파일/S3 경로에 안전한 문자열로 변환"""
     return text.replace(" ", "_").replace("/", "-")
+
+
+

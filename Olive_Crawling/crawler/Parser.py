@@ -5,6 +5,7 @@ from playwright.sync_api import Page
 from config.Settings import BASE_URL
 from config.Categories import COSMETIC_KEYWORDS
 from crawler.Utils import canonicalize_goods_url
+from Model.Products import make_product_dict
 
 
 class Parser:
@@ -56,18 +57,7 @@ class Parser:
         상세 페이지가 이미 열려 있다고 가정하고 상품 정보를 파싱한다.
         (페이지 이동은 호출부 ProductFetcher 에서 처리)
         """
-        product = {
-            "url":           canonicalize_goods_url(url),
-            "main_category": main_cat,
-            "sub_category":  sub_cat,
-            "name":          "",
-            "brand":         "",
-            "price":         "",
-            "ingredients":   "",
-            "product_info":  {},
-            "crawled_at":    datetime.now().isoformat(),
-        }
-
+        product = make_product_dict(url, main_cat, sub_cat)  
         # 상품명 (타이틀에서 ' | 올리브영' 제거)
         raw_title = self.page.title()
         product["name"] = (

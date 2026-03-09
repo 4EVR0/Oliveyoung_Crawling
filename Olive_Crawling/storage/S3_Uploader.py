@@ -82,6 +82,7 @@ class S3Uploader:
         self._manifest["status"]      = "completed" if success else "failed"
         self._manifest["finished_at"] = datetime.now().isoformat()
         self._put_manifest()
+        
         print(
             f"\n✅ S3 finalize 완료 | "
             f"총 {self._manifest['total_products']}개 상품 | "
@@ -104,10 +105,12 @@ class S3Uploader:
         part 파일을 S3 에 업로드한다.
         성공 후에만 manifest 를 갱신한다.
         """
+        
         cat_key = f"{main_cat}/{sub_cat}"
         self._manifest["categories"].setdefault(
             cat_key, {"parts": [], "product_count": 0}
         )
+        
         part_num = len(self._manifest["categories"][cat_key]["parts"])
         s3_key   = f"{self._make_prefix(main_cat, sub_cat)}/part_{part_num:04d}.json"
 
@@ -137,16 +140,20 @@ class S3Uploader:
             "product_count": len(products),
             "uploaded_at":   datetime.now().isoformat(),
         }
+        
         self._manifest["categories"][cat_key]["parts"].append(part_info)
         self._manifest["categories"][cat_key]["product_count"] += len(products)
         self._manifest["total_products"]                        += len(products)
         self._manifest["parts"].append(part_info)
+        
         print(f"  📤 S3 업로드: {s3_key} ({len(products)}개)")
 
     def _put_manifest(self):
         """manifest.json 을 S3 에 PUT 한다."""
+        
         key  = f"oliveyoung/_manifests/run_id={self.run_id}/manifest.json"
         data = json.dumps(self._manifest, ensure_ascii=False, indent=2).encode("utf-8")
+        
         try:
             self.s3.put_object(
                 Bucket=self.bucket,

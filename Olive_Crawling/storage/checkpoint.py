@@ -68,6 +68,7 @@ class CheckpointManager:
 
     def save(self):
         """현재 상태를 로컬 파일에 저장"""
+        
         self._state["last_updated"] = datetime.now().isoformat()
         with open(self.CHECKPOINT_FILE, "w", encoding="utf-8") as f:
             json.dump(self._state, f, ensure_ascii=False, indent=2)
@@ -81,12 +82,15 @@ class CheckpointManager:
 
     def mark_subcategory_done(self, main_cat: str, sub_cat: str):
         """서브카테고리 전체 완료 표시 (page_progress 정리 포함)"""
+        
         key = f"{main_cat}/{sub_cat}"
         if key not in self._state["completed_subcategories"]:
             self._state["completed_subcategories"].append(key)
+        
         # 완료된 서브카테고리의 page_progress 는 정리
         self._state["page_progress"].pop(key, None)
         self.save()
+        
         print(f"  ✅ 체크포인트: '{key}' 완료 기록")
 
     # ------------------------------------------------------------------ #
@@ -95,6 +99,7 @@ class CheckpointManager:
 
     def get_completed_pages(self, main_cat: str, sub_cat: str) -> set[int]:
         """S3 업로드까지 완료된 페이지 번호 집합 반환"""
+        
         key = f"{main_cat}/{sub_cat}"
         return set(self._state["page_progress"].get(key, {}).get("completed_pages", []))
 

@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY config/   ./config/
 COPY crawler/  ./crawler/
 COPY storage/  ./storage/
+COPY Model/    ./Model/
 COPY main.py   .
 
 # 임시 저장 디렉토리 생성

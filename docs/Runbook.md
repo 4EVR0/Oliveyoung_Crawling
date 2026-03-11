@@ -89,6 +89,11 @@ s3://bucket-name/
     └── _manifests/
         └── run_id=20260225_093000/
             └── manifest.json
+
+## 크롤링 코드 처음부터 사용시
+
+
+  rm temp_crawl/checkpoint_재원.json
 ```
 
 ## 기능

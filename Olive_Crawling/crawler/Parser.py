@@ -137,21 +137,16 @@ class Parser:
     # ------------------------------------------------------------------ #
 
     def _parse_review_stats(self, product: dict):
-        print("      [DEBUG] _parse_review_stats 시작")
         try:
             review_tab = self.page.locator("button:has-text('리뷰&셔터')").first
-            print("      [DEBUG] review_tab count:", self.page.locator("button:has-text('리뷰&셔터')").count())
 
             if review_tab.is_visible(timeout=3000):
-                print("      [DEBUG] 리뷰 탭 클릭 성공")
                 review_tab.click()
                 time.sleep(2)
             else:
-                print("      [DEBUG] 리뷰 탭 안 보임")
                 return
 
             review_area_locator = self.page.locator("[class*='ReviewArea']")
-            print("      [DEBUG] review_area count:", review_area_locator.count())
 
             review_area = None
             for i in range(review_area_locator.count()):
@@ -160,14 +155,10 @@ class Parser:
                     text = area.inner_text(timeout=2000)
                     if "평점" in text and "리뷰" in text:
                         review_area = area
-                        print(f"      [DEBUG] review_area 선택 index: {i}")
-                        print("      [DEBUG] area_text:", text[:300])
                         break
                 except Exception as e:
-                    print(f"      [DEBUG] review_area[{i}] 읽기 실패: {e}")
 
             if review_area is None:
-                print("      [DEBUG] 적절한 review_area 못 찾음")
                 return
 
             area_text = review_area.inner_text()
@@ -180,11 +171,8 @@ class Parser:
             if count_match:
                 product["review_count"] = count_match.group(1).replace(',', '')
 
-            print("      [DEBUG] rating:", product["rating"])
-            print("      [DEBUG] review_count:", product["review_count"])
 
             detail_btn_locator = self.page.locator("text=자세히 보기")
-            print("      [DEBUG] detail_btn count:", detail_btn_locator.count())
 
             detail_btn = None
             for i in range(detail_btn_locator.count()):
@@ -193,42 +181,30 @@ class Parser:
                     btn_text = btn.inner_text(timeout=1000)
                 except Exception:
                     btn_text = ""
-                print(f"      [DEBUG] detail_btn[{i}] text: {btn_text}")
 
                 try:
                     if btn.is_visible(timeout=1000):
                         detail_btn = btn
-                        print(f"      [DEBUG] detail_btn 선택 index: {i}")
                         break
                 except Exception as e:
-                    print(f"      [DEBUG] detail_btn[{i}] visible 체크 실패: {e}")
 
             if detail_btn is None:
-                print("      [DEBUG] 자세히보기 버튼 못 찾음")
                 return
 
-            print("      [DEBUG] modal before click:", self.page.locator("oy-review-modal-component").count())
-            print("      [DEBUG] 자세히보기 클릭 시도")
             detail_btn.click()
             time.sleep(1)
-            print("      [DEBUG] modal after click:", self.page.locator("oy-review-modal-component").count())
 
             self.page.wait_for_selector("oy-review-modal-component", state="attached", timeout=5000)
-            print("      [DEBUG] modal 생성 확인(attached)")
 
             modal = self.page.locator("oy-review-modal-component").first
             try:
-                print("      [DEBUG] modal visible:", modal.is_visible())
             except Exception as e:
-                print(f"      [DEBUG] modal visible 체크 실패: {e}")
 
             time.sleep(1)
 
             self._parse_shadow_dom_stats(product)
-            print("      [DEBUG] review_stats:", product["review_stats"])
 
         except Exception as e:
-            print(f"      [DEBUG] _parse_review_stats 예외: {e}")
     def _parse_shadow_dom_stats(self, product: dict):
         try:
             stats = self.page.evaluate("""
@@ -291,7 +267,6 @@ class Parser:
                 }
             """)
 
-            print("      [DEBUG] shadow result:", stats)
 
             if stats and "result" in stats and stats["result"]:
                 product["review_stats"] = stats["result"]

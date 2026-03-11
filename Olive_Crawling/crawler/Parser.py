@@ -137,9 +137,9 @@ class Parser:
     # ------------------------------------------------------------------ #
 
     def _parse_review_stats(self, product: dict):
+        """리뷰&셔터 탭에서 평점, 리뷰수, 상세 리뷰 통계를 파싱한다."""
         try:
             review_tab = self.page.locator("button:has-text('리뷰&셔터')").first
-
             if review_tab.is_visible(timeout=3000):
                 review_tab.click()
                 time.sleep(2)
@@ -147,21 +147,22 @@ class Parser:
                 return
 
             review_area_locator = self.page.locator("[class*='ReviewArea']")
-
             review_area = None
+            area_text = ""
+
             for i in range(review_area_locator.count()):
                 area = review_area_locator.nth(i)
                 try:
                     text = area.inner_text(timeout=2000)
                     if "평점" in text and "리뷰" in text:
                         review_area = area
+                        area_text = text
                         break
-                except Exception as e:
+                except Exception:
+                    continue
 
             if review_area is None:
                 return
-
-            area_text = review_area.inner_text()
 
             rating_match = re.search(r'(\d+\.?\d*)', area_text)
             if rating_match:
@@ -169,49 +170,38 @@ class Parser:
 
             count_match = re.search(r'(\d[\d,]*)\s*건', area_text)
             if count_match:
-                product["review_count"] = count_match.group(1).replace(',', '')
+                product["review_count"] = count_match.group(1).replace(",", "")
 
+            detail_btn = self.page.locator("text=자세히 보기").first
+            if detail_btn.is_visible(timeout=3000):
+                detail_btn.click()
+                self.page.wait_for_selector(
+                    "oy-review-modal-component",
+                    state="attached",
+                    timeout=5000,
+                )
+                time.sleep(1)
+                self._parse_shadow_dom_stats(product)
 
-            detail_btn_locator = self.page.locator("text=자세히 보기")
-
-            detail_btn = None
-            for i in range(detail_btn_locator.count()):
-                btn = detail_btn_locator.nth(i)
                 try:
-                    btn_text = btn.inner_text(timeout=1000)
+                    close_btn = self.page.locator("text=닫기").first
+                    if close_btn.is_visible(timeout=1000):
+                        close_btn.click()
+                        time.sleep(0.5)
                 except Exception:
-                    btn_text = ""
-
-                try:
-                    if btn.is_visible(timeout=1000):
-                        detail_btn = btn
-                        break
-                except Exception as e:
-
-            if detail_btn is None:
-                return
-
-            detail_btn.click()
-            time.sleep(1)
-
-            self.page.wait_for_selector("oy-review-modal-component", state="attached", timeout=5000)
-
-            modal = self.page.locator("oy-review-modal-component").first
-            try:
-            except Exception as e:
-
-            time.sleep(1)
-
-            self._parse_shadow_dom_stats(product)
+                    pass
 
         except Exception as e:
+            print(f"      ⚠️ 리뷰 통계 파싱 실패: {e}")
+
     def _parse_shadow_dom_stats(self, product: dict):
+        """Shadow DOM(oy-review-modal-component) 안의 속성별 리뷰 통계를 추출한다."""
         try:
             stats = self.page.evaluate("""
                 () => {
                     const host = document.querySelector('oy-review-modal-component');
-                    if (!host) return { _debug: 'NO_HOST' };
-                    if (!host.shadowRoot) return { _debug: 'NO_SHADOW_ROOT' };
+                    if (!host) return {};
+                    if (!host.shadowRoot) return {};
 
                     const root = host.shadowRoot;
                     const result = {};
@@ -220,14 +210,7 @@ class Parser:
                         root.querySelectorAll('oy-review-attribute-detail')
                     );
 
-                    if (detailHosts.length === 0) {
-                        return {
-                            _debug: 'NO_ATTRIBUTE_DETAIL',
-                            html: root.innerHTML.slice(0, 3000)
-                        };
-                    }
-
-                    detailHosts.forEach((detailHost, idx) => {
+                    detailHosts.forEach((detailHost) => {
                         const detailRoot = detailHost.shadowRoot;
                         if (!detailRoot) return;
 
@@ -237,7 +220,9 @@ class Parser:
                         const category = titleEl.textContent.trim();
                         if (!category) return;
 
-                        const items = Array.from(detailRoot.querySelectorAll('li.feature-item'));
+                        const items = Array.from(
+                            detailRoot.querySelectorAll('li.feature-item')
+                        );
                         if (items.length === 0) return;
 
                         result[category] = {};
@@ -247,7 +232,9 @@ class Parser:
                             const percentEl = item.querySelector('span.percentage');
 
                             const label = labelEl ? labelEl.textContent.trim() : '';
-                            const percent = percentEl ? percentEl.textContent.replace(/\\s+/g, '') : '';
+                            const percent = percentEl
+                                ? percentEl.textContent.replace(/\\s+/g, '')
+                                : '';
 
                             if (label && percent) {
                                 result[category][label] = percent;
@@ -259,17 +246,12 @@ class Parser:
                         }
                     });
 
-                    return {
-                        _debug: 'OK',
-                        detailCount: detailHosts.length,
-                        result
-                    };
+                    return result;
                 }
             """)
 
-
-            if stats and "result" in stats and stats["result"]:
-                product["review_stats"] = stats["result"]
+            if stats:
+                product["review_stats"] = stats
 
         except Exception as e:
             print(f"      ⚠️ Shadow DOM 추출 실패: {e}")

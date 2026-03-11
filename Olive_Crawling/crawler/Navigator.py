@@ -22,37 +22,7 @@ class Navigator:
         self.page.goto(BASE_URL, wait_until="networkidle", timeout=30_000)
         time.sleep(3)
 
-    def go_to_subcategory(self, main_cat: str, sub_cat: str) -> bool:
-        """
-        메인카테고리 호버 → 서브카테고리 클릭으로 해당 목록 페이지로 이동.
-        성공하면 True, 실패하면 False 반환.
-        """
-        print(f"\n  '{main_cat} > {sub_cat}' 페이지로 이동 중...")
-        try:
-            cat_btn = self.page.locator(
-                "button:has-text('카테고리'), a:has-text('카테고리')"
-            ).first
-            if cat_btn.is_visible(timeout=3_000):
-                cat_btn.click()
-                time.sleep(1)
-
-            main_link = self.page.locator(f"a:has-text('{main_cat}')").first
-            if main_link.is_visible(timeout=3_000):
-                main_link.hover()
-                time.sleep(0.5)
-
-            sub_link = self.page.locator(f"a:has-text('{sub_cat}')").first
-            if sub_link.is_visible(timeout=3_000):
-                sub_link.click()
-                time.sleep(3)
-                print(f"    ✅ 이동 완료: {self.page.title()}")
-                return True
-
-        except Exception as e:
-            print(f"    ❌ 카테고리 이동 실패: {e}")
-
-        return False
-
+    
     # ------------------------------------------------------------------ #
     #  페이지네이션
     # ------------------------------------------------------------------ #
@@ -127,8 +97,7 @@ class Navigator:
             for selector in ["a:has-text('>>')", 
                              ".pageing a.next", 
                              ".paging a.next",
-                             "a[class*='next']", 
-                             "a:has-text('다음')"]:
+                             "a[class*='next']", "a:has-text('다음')"]:
                 try:
                     btn = self.page.locator(selector).first
                     if btn.is_visible(timeout=500):
@@ -144,6 +113,42 @@ class Navigator:
                 return False
 
         return False
+
+    def go_to_subcategory(self, main_cat: str, sub_cat: str) -> bool:
+            print(f"\n  '{main_cat} > {sub_cat}' 페이지로 이동 중...")
+            try:
+                cat_btn = self.page.locator(
+                    "button:has-text('카테고리'), a:has-text('카테고리')"
+                ).first
+                if cat_btn.is_visible(timeout=3_000):
+                    cat_btn.click()
+                    time.sleep(1)
+
+                main_link = self.page.locator(f"a:has-text('{main_cat}')").first
+                if main_link.is_visible(timeout=3_000):
+                    main_link.hover()
+                    time.sleep(1)  # 서브메뉴 펼쳐질 시간 확보
+
+                # ✅ main_link 의 부모 컨테이너 안에서만 sub_link 탐색
+                sub_link = self.page.locator(
+                    f"a:has-text('{main_cat}') >> xpath=../../.. >> a:has-text('{sub_cat}')"
+                ).first
+
+                if not sub_link.is_visible(timeout=3_000):
+                    # fallback: URL 에 cateId 직접 사용
+                    print(f"    ⚠️ 서브메뉴에서 '{sub_cat}' 못 찾음")
+                    return False
+
+                sub_link.click()
+                time.sleep(3)
+                print(f"    ✅ 이동 완료: {self.page.title()}")
+                return True
+
+            except Exception as e:
+                print(f"    ❌ 카테고리 이동 실패: {e}")
+
+            return False
+
 
     def goto_url(self, url: str, wait: str = "networkidle", timeout: int = 30_000):
         """URL 직접 이동 (URL 기반 페이지 이동용)"""

@@ -5,7 +5,8 @@ from playwright.sync_api import Page
 from config.Settings import BASE_URL
 from config.Categories import (
     COSMETIC_KEYWORDS,
-    REVIEW_PATTERNS
+    REVIEW_CATEGORIES,
+    KEYWORD_MAP
 )
 from crawler.Utils import canonicalize_goods_url
 from Model.Products import make_product_dict
@@ -136,83 +137,164 @@ class Parser:
     # ------------------------------------------------------------------ #
 
     def _parse_review_stats(self, product: dict):
-        """리뷰&셔터 탭에서 평점, 리뷰수, 피부타입/고민/자극도 통계를 파싱한다."""
+        print("      [DEBUG] _parse_review_stats 시작")
         try:
-            # 리뷰&셔터 탭 클릭
             review_tab = self.page.locator("button:has-text('리뷰&셔터')").first
-            if review_tab.is_visible(timeout=3_000):
+            print("      [DEBUG] review_tab count:", self.page.locator("button:has-text('리뷰&셔터')").count())
+
+            if review_tab.is_visible(timeout=3000):
+                print("      [DEBUG] 리뷰 탭 클릭 성공")
                 review_tab.click()
                 time.sleep(2)
+            else:
+                print("      [DEBUG] 리뷰 탭 안 보임")
+                return
 
-            # 평점 및 리뷰 수
+            review_area_locator = self.page.locator("[class*='ReviewArea']")
+            print("      [DEBUG] review_area count:", review_area_locator.count())
+
+            review_area = None
+            for i in range(review_area_locator.count()):
+                area = review_area_locator.nth(i)
+                try:
+                    text = area.inner_text(timeout=2000)
+                    if "평점" in text and "리뷰" in text:
+                        review_area = area
+                        print(f"      [DEBUG] review_area 선택 index: {i}")
+                        print("      [DEBUG] area_text:", text[:300])
+                        break
+                except Exception as e:
+                    print(f"      [DEBUG] review_area[{i}] 읽기 실패: {e}")
+
+            if review_area is None:
+                print("      [DEBUG] 적절한 review_area 못 찾음")
+                return
+
+            area_text = review_area.inner_text()
+
+            rating_match = re.search(r'(\d+\.?\d*)', area_text)
+            if rating_match:
+                product["rating"] = rating_match.group(1)
+
+            count_match = re.search(r'(\d[\d,]*)\s*건', area_text)
+            if count_match:
+                product["review_count"] = count_match.group(1).replace(',', '')
+
+            print("      [DEBUG] rating:", product["rating"])
+            print("      [DEBUG] review_count:", product["review_count"])
+
+            detail_btn_locator = self.page.locator("text=자세히 보기")
+            print("      [DEBUG] detail_btn count:", detail_btn_locator.count())
+
+            detail_btn = None
+            for i in range(detail_btn_locator.count()):
+                btn = detail_btn_locator.nth(i)
+                try:
+                    btn_text = btn.inner_text(timeout=1000)
+                except Exception:
+                    btn_text = ""
+                print(f"      [DEBUG] detail_btn[{i}] text: {btn_text}")
+
+                try:
+                    if btn.is_visible(timeout=1000):
+                        detail_btn = btn
+                        print(f"      [DEBUG] detail_btn 선택 index: {i}")
+                        break
+                except Exception as e:
+                    print(f"      [DEBUG] detail_btn[{i}] visible 체크 실패: {e}")
+
+            if detail_btn is None:
+                print("      [DEBUG] 자세히보기 버튼 못 찾음")
+                return
+
+            print("      [DEBUG] modal before click:", self.page.locator("oy-review-modal-component").count())
+            print("      [DEBUG] 자세히보기 클릭 시도")
+            detail_btn.click()
+            time.sleep(1)
+            print("      [DEBUG] modal after click:", self.page.locator("oy-review-modal-component").count())
+
+            self.page.wait_for_selector("oy-review-modal-component", state="attached", timeout=5000)
+            print("      [DEBUG] modal 생성 확인(attached)")
+
+            modal = self.page.locator("oy-review-modal-component").first
             try:
-                review_area = self.page.locator("[class*='ReviewArea']").first
-                if review_area.is_visible(timeout=2_000):
-                    area_text = review_area.inner_text()
-                    rating_match = re.search(r'(\d+\.?\d*)', area_text)
-                    if rating_match:
-                        product["rating"] = rating_match.group(1)
-                    count_match = re.search(r'(\d[\d,]*)\s*건', area_text)
-                    if count_match:
-                        product["review_count"] = count_match.group(1).replace(',', '')
-            except Exception:
-                pass
+                print("      [DEBUG] modal visible:", modal.is_visible())
+            except Exception as e:
+                print(f"      [DEBUG] modal visible 체크 실패: {e}")
 
-            # 자세히 보기 → Shadow DOM 통계 추출
-            try:
-                detail_btn = self.page.locator("text=자세히 보기").first
-                if detail_btn.is_visible(timeout=3_000):
-                    detail_btn.click()
-                    time.sleep(3)
-                    self._parse_shadow_dom_stats(product)
+            time.sleep(1)
 
-                    # 팝업 닫기
-                    try:
-                        close_btn = self.page.locator("text=닫기").first
-                        if close_btn.is_visible(timeout=1_000):
-                            close_btn.click()
-                            time.sleep(0.5)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+            self._parse_shadow_dom_stats(product)
+            print("      [DEBUG] review_stats:", product["review_stats"])
 
-        except Exception:
-            pass
-
+        except Exception as e:
+            print(f"      [DEBUG] _parse_review_stats 예외: {e}")
     def _parse_shadow_dom_stats(self, product: dict):
-        """Shadow DOM(oy-review-modal-component) 에서 리뷰 통계 퍼센트를 추출한다."""
         try:
-            shadow_text = self.page.evaluate("""
+            stats = self.page.evaluate("""
                 () => {
-                    function getAllText(element) {
-                        let text = '';
-                        if (element.shadowRoot) {
-                            text += getAllText(element.shadowRoot);
-                        }
-                        for (const child of element.childNodes) {
-                            if (child.nodeType === Node.TEXT_NODE) {
-                                text += child.textContent + ' ';
-                            } else if (child.nodeType === Node.ELEMENT_NODE) {
-                                text += getAllText(child);
-                            }
-                        }
-                        return text;
+                    const host = document.querySelector('oy-review-modal-component');
+                    if (!host) return { _debug: 'NO_HOST' };
+                    if (!host.shadowRoot) return { _debug: 'NO_SHADOW_ROOT' };
+
+                    const root = host.shadowRoot;
+                    const result = {};
+
+                    const detailHosts = Array.from(
+                        root.querySelectorAll('oy-review-attribute-detail')
+                    );
+
+                    if (detailHosts.length === 0) {
+                        return {
+                            _debug: 'NO_ATTRIBUTE_DETAIL',
+                            html: root.innerHTML.slice(0, 3000)
+                        };
                     }
-                    const modal = document.querySelector('oy-review-modal-component');
-                    return modal ? getAllText(modal) : '';
+
+                    detailHosts.forEach((detailHost, idx) => {
+                        const detailRoot = detailHost.shadowRoot;
+                        if (!detailRoot) return;
+
+                        const titleEl = detailRoot.querySelector('h3.title');
+                        if (!titleEl) return;
+
+                        const category = titleEl.textContent.trim();
+                        if (!category) return;
+
+                        const items = Array.from(detailRoot.querySelectorAll('li.feature-item'));
+                        if (items.length === 0) return;
+
+                        result[category] = {};
+
+                        items.forEach((item) => {
+                            const labelEl = item.querySelector('span.label');
+                            const percentEl = item.querySelector('span.percentage');
+
+                            const label = labelEl ? labelEl.textContent.trim() : '';
+                            const percent = percentEl ? percentEl.textContent.replace(/\\s+/g, '') : '';
+
+                            if (label && percent) {
+                                result[category][label] = percent;
+                            }
+                        });
+
+                        if (Object.keys(result[category]).length === 0) {
+                            delete result[category];
+                        }
+                    });
+
+                    return {
+                        _debug: 'OK',
+                        detailCount: detailHosts.length,
+                        result
+                    };
                 }
             """)
 
-            if not shadow_text:
-                return
+            print("      [DEBUG] shadow result:", stats)
 
-            text = re.sub(r'\s+', ' ', shadow_text)
+            if stats and "result" in stats and stats["result"]:
+                product["review_stats"] = stats["result"]
 
-            
-            for pattern, category, key in REVIEW_PATTERNS:
-                match = re.search(pattern, text)
-                if match:
-                    product["review_stats"].setdefault(category, {})[key] = f"{match.group(1)}%"
         except Exception as e:
             print(f"      ⚠️ Shadow DOM 추출 실패: {e}")

@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 import boto3
+from botocore.exceptions import ClientError
 
 from config.Settings import PART_SIZE, S3_MAX_RETRIES
 from crawler.Utils import safe_name
@@ -26,7 +27,9 @@ class S3Uploader:
         self.s3      = boto3.client("s3")
         self.bucket  = bucket
         self.run_id  = run_id
-        self._buffer: dict[tuple, list] = {}  # {(main_cat, sub_cat): [products]}
+        self._buffer: dict[tuple, list] = {}
+        
+        # 1. 기본 manifest 구조 정의
         self._manifest = {
             "run_id":         run_id,
             "created_at":     datetime.now().isoformat(),
@@ -35,7 +38,30 @@ class S3Uploader:
             "total_products": 0,
             "parts":          [],
         }
+        
+        # 2. 기존에 저장된 manifest가 S3에 있다면 불러와서 복구
+        self._load_existing_manifest()
 
+    def _load_existing_manifest(self):
+        """S3에서 기존 manifest.json을 찾아 상태를 복구한다."""
+        key = f"oliveyoung/_manifests/run_id={self.run_id}/manifest.json"
+        try:
+            response = self.s3.get_object(Bucket=self.bucket, Key=key)
+            existing_data = json.loads(response['Body'].read().decode('utf-8'))
+            
+            # 기존 데이터로 manifest 갱신
+            self._manifest.update(existing_data)
+            print(f"  🔄 S3 Manifest 복구 완료: 현재 총 {self._manifest['total_products']}개 상품 수집됨")
+        except ClientError as e:
+            # 파일이 없는 경우는 에러가 아니라 새 수집으로 간주
+            if e.response['Error']['Code'] == 'NoSuchKey':
+                print(f"  🆕 신규 수집 시작 (기존 manifest 없음)")
+            else:
+                print(f"  ⚠️ Manifest 로드 중 오류 발생: {e}")
+        except Exception as e:
+            print(f"  ⚠️ 예기치 못한 Manifest 로드 오류: {e}")
+
+            
     # ------------------------------------------------------------------ #
     #  공개 인터페이스
     # ------------------------------------------------------------------ #

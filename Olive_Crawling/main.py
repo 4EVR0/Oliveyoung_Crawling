@@ -20,6 +20,7 @@ from storage.checkpoint import CheckpointManager
 from storage.S3_Uploader import S3Uploader
 from storage.FileWriter import save_json, save_csv
 
+
 def _crawl_categories(
     fetcher: ProductFetcher,
     browser: BrowserManager,

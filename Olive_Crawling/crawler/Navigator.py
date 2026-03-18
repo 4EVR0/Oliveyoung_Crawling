@@ -10,12 +10,22 @@ class Navigator:
 
     async def go_home(self):
         await self.page.goto(BASE_URL, wait_until="networkidle", timeout=30_000)
-        await asyncio.sleep(1)
+        await asyncio.sleep(3)
 
     async def get_total_pages(self) -> int:
+        """
+        현재 페이지에서 전체 페이지 수를 파악한다.
+        sync 버전과 동일하게:
+        1) '끝' 버튼 href → pageIdx 추출
+        2) '다음 그룹' 버튼 존재 시 999 반환
+        3) 현재 보이는 페이지 숫자 중 최대값 반환
+        """
         for selector in [
-            "a.last", "a:has-text('끝')", "a:has-text('맨끝')",
-            "a[title*='마지막']", "a[title*='끝']"
+            "a.last",
+            "a:has-text('끝')",
+            "a:has-text('맨끝')",
+            "a[title*='마지막']",
+            "a[title*='끝']",
         ]:
             try:
                 btn = self.page.locator(selector).first
@@ -29,9 +39,26 @@ class Navigator:
             except Exception:
                 continue
 
+        for selector in [
+            "a:has-text('>>')",
+            "a.next",
+            "a:has-text('다음')",
+            ".pageing a.next",
+            ".paging a.next",
+            "a[class*='next']",
+        ]:
+            try:
+                btn = self.page.locator(selector).first
+                if await btn.is_visible(timeout=500):
+                    print("    (다음 그룹 버튼 발견 → 전체 순회 모드)")
+                    return 999
+            except Exception:
+                continue
+
         max_page = 1
         links = self.page.locator(".pageing a, .paging a")
         count = await links.count()
+
         for i in range(count):
             try:
                 text = (await links.nth(i).inner_text()).strip()
@@ -39,6 +66,7 @@ class Navigator:
                     max_page = max(max_page, int(text))
             except Exception:
                 pass
+
         return max_page
 
     async def go_to_subcategory(self, main_cat: str, sub_cat: str) -> bool:
@@ -49,12 +77,12 @@ class Navigator:
             ).first
             if await cat_btn.is_visible(timeout=3000):
                 await cat_btn.click()
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1)
 
             main_link = self.page.locator(f"a:has-text('{main_cat}')").first
             if await main_link.is_visible(timeout=3000):
                 await main_link.hover()
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1)
 
             sub_link = self.page.locator(
                 f"a:has-text('{main_cat}') >> xpath=../../.. >> a:has-text('{sub_cat}')"
@@ -65,7 +93,7 @@ class Navigator:
                 return False
 
             await sub_link.click()
-            await self.page.wait_for_load_state("networkidle")
+            await asyncio.sleep(3)
             print(f"    ✅ 이동 완료: {await self.page.title()}")
             return True
 
@@ -75,3 +103,4 @@ class Navigator:
 
     async def goto_url(self, url: str, wait: str = "networkidle", timeout: int = 30_000):
         await self.page.goto(url, wait_until=wait, timeout=timeout)
+        await asyncio.sleep(1)

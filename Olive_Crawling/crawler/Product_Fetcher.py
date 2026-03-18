@@ -27,7 +27,7 @@ class ProductFetcher:
         self.s3 = s3
 
     async def fetch_subcategory(self, main_cat: str, sub_cat: str) -> list[dict]:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"수집 시작: {main_cat} > {sub_cat}")
 
         if self.checkpoint.is_subcategory_done(main_cat, sub_cat):
@@ -42,6 +42,8 @@ class ProductFetcher:
         completed_pages = self.checkpoint.get_completed_pages(main_cat, sub_cat)
         pages = self._group_urls_by_page(product_urls, PAGE_SIZE)
         all_products = []
+
+        await asyncio.sleep(2)
 
         for page_num, page_urls in pages.items():
             if page_num in completed_pages:
@@ -80,30 +82,37 @@ class ProductFetcher:
         if not await nav.go_to_subcategory(main_cat, sub_cat):
             return []
 
-        current_url = self.browser.page.url
-        total_pages = await nav.get_total_pages()
-        if total_pages == 999:
-            total_pages = 100
-
         all_urls = []
+        current_url = self.browser.page.url
+        page_num = 1
         prev_urls = None
 
-        for page_num in range(1, total_pages + 1):
+        while page_num <= 100:
             target_url = (
                 re.sub(r"pageIdx=\d+", f"pageIdx={page_num}", current_url)
                 if "pageIdx=" in current_url
                 else f"{current_url}&pageIdx={page_num}"
             )
+
             try:
-                await nav.goto_url(target_url)
+                await nav.goto_url(target_url, wait="domcontentloaded")
+                await asyncio.sleep(1.2)
+
                 new_urls = await parser.get_product_urls()
 
-                if not new_urls or new_urls == prev_urls:
+                if not new_urls:
+                    break
+
+                # 직전 페이지와 완전히 같으면 종료
+                if new_urls == prev_urls:
                     break
 
                 all_urls.extend(new_urls)
                 prev_urls = new_urls
-            except Exception:
+                page_num += 1
+
+            except Exception as e:
+                print(f"  ⚠️ URL 수집 중단: {str(e)[:80]}")
                 break
 
         all_urls = list(dict.fromkeys(all_urls))
@@ -129,7 +138,7 @@ class ProductFetcher:
 
         async def worker(idx: int, url: str):
             async with sem:
-                print(f"    [{page_num}-{idx+1}/{len(urls)}] {url[-30:]}")
+                print(f"    [{page_num}-{idx + 1}/{len(urls)}] {url[-30:]}")
                 return await self._fetch_single_with_retry(url, main_cat, sub_cat)
 
         tasks = [worker(i, url) for i, url in enumerate(urls)]
@@ -151,6 +160,8 @@ class ProductFetcher:
             try:
                 page = await self.browser.new_page()
                 await page.goto(url, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+                await asyncio.sleep(1.5)
+
                 await self.browser.close_popups(page)
 
                 parser = Parser(page)
@@ -164,6 +175,7 @@ class ProductFetcher:
 
             except Exception as e:
                 err = str(e).lower()
+
                 if page:
                     try:
                         await page.close()
@@ -176,7 +188,7 @@ class ProductFetcher:
                     await self.browser.restart()
 
                 if attempt < RETRY_COUNT - 1:
-                    print(f"      ⚠️ 재시도 {attempt+1}/{RETRY_COUNT}: {str(e)[:60]}")
+                    print(f"      ⚠️ 재시도 {attempt + 1}/{RETRY_COUNT}: {str(e)[:60]}")
                     await asyncio.sleep(2 ** attempt)
                 else:
                     raise

@@ -20,6 +20,32 @@ from storage.checkpoint import CheckpointManager
 from storage.S3_Uploader import S3Uploader
 from storage.FileWriter import save_json, save_csv
 
+def _crawl_categories(
+    fetcher: ProductFetcher,
+    browser: BrowserManager,
+    target_categories: dict,
+) -> tuple[list[dict], bool]:
+    """카테고리 순회 + 수집. (all_products, success) 반환"""
+    all_products: list[dict] = []
+    success = True
+
+    for main_cat, sub_cats in target_categories.items():
+        for sub_cat in sub_cats:
+            try:
+                products = fetcher.fetch_subcategory(main_cat, sub_cat)
+                all_products.extend(products)
+            except KeyboardInterrupt:
+                print("\n⛔ 사용자 중단 감지 (Ctrl+C)")
+                success = False
+                raise
+            except Exception as e:
+                print(f"  ❌ '{main_cat} > {sub_cat}' 오류: {e}")
+                success = False
+                if any(k in str(e).lower() for k in ("crashed", "closed", "net::err")):
+                    browser.restart()
+
+    return all_products, success
+
 
 def run_crawl(
     target_categories: dict,
@@ -27,40 +53,14 @@ def run_crawl(
     headless: bool,
     person: str = None,
 ):
-    """카테고리 딕셔너리를 받아 전체 크롤링을 수행하고 상품 목록을 반환"""
     checkpoint = CheckpointManager(person=person)
-
-    s3 = (
-        S3Uploader(
-            bucket=s3_bucket,
-            run_id=checkpoint._state["run_id"],
-        )
-        if s3_bucket
-        else None
-    )
-
+    s3 = S3Uploader(bucket=s3_bucket, run_id=checkpoint._state["run_id"]) if s3_bucket else None
     browser = BrowserManager(headless=headless)
     browser.start()
-
     fetcher = ProductFetcher(browser=browser, checkpoint=checkpoint, s3=s3)
-    all_products: list[dict] = []
-    success = True
 
     try:
-        for main_cat, sub_cats in target_categories.items():
-            for sub_cat in sub_cats:
-                try:
-                    products = fetcher.fetch_subcategory(main_cat, sub_cat)
-                    all_products.extend(products)
-                except KeyboardInterrupt:
-                    print("\n⛔ 사용자 중단 감지 (Ctrl+C)")
-                    success = False
-                    raise
-                except Exception as e:
-                    print(f"  ❌ '{main_cat} > {sub_cat}' 오류: {e}")
-                    success = False
-                    if any(k in str(e).lower() for k in ("crashed", "closed", "net::err")):
-                        browser.restart()
+        all_products, success = _crawl_categories(fetcher, browser, target_categories)
     finally:
         browser.close()
         if s3:

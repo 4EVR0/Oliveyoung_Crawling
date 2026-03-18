@@ -9,6 +9,7 @@ python main.py                                # 로컬 저장만
 """
 
 import argparse
+import asyncio
 from datetime import datetime
 from typing import Optional
 
@@ -21,7 +22,7 @@ from storage.S3_Uploader import S3Uploader
 from storage.FileWriter import save_json, save_csv
 
 
-def _crawl_categories(
+async def _crawl_categories(
     fetcher: ProductFetcher,
     browser: BrowserManager,
     target_categories: dict,
@@ -33,7 +34,7 @@ def _crawl_categories(
     for main_cat, sub_cats in target_categories.items():
         for sub_cat in sub_cats:
             try:
-                products = fetcher.fetch_subcategory(main_cat, sub_cat)
+                products = await fetcher.fetch_subcategory(main_cat, sub_cat)
                 all_products.extend(products)
             except KeyboardInterrupt:
                 print("\n⛔ 사용자 중단 감지 (Ctrl+C)")
@@ -43,27 +44,34 @@ def _crawl_categories(
                 print(f"  ❌ '{main_cat} > {sub_cat}' 오류: {e}")
                 success = False
                 if any(k in str(e).lower() for k in ("crashed", "closed", "net::err")):
-                    browser.restart()
+                    await browser.restart()
 
     return all_products, success
 
 
-def run_crawl(
+async def run_crawl(
     target_categories: dict,
     s3_bucket: Optional[str],
     headless: bool,
     person: str = None,
 ):
     checkpoint = CheckpointManager(person=person)
-    s3 = S3Uploader(bucket=s3_bucket, run_id=checkpoint._state["run_id"]) if s3_bucket else None
+    s3 = (
+        S3Uploader(bucket=s3_bucket, run_id=checkpoint._state["run_id"])
+        if s3_bucket else None
+    )
+
     browser = BrowserManager(headless=headless)
-    browser.start()
+    await browser.start()
     fetcher = ProductFetcher(browser=browser, checkpoint=checkpoint, s3=s3)
 
+    all_products: list[dict] = []
+    success = True
+
     try:
-        all_products, success = _crawl_categories(fetcher, browser, target_categories)
+        all_products, success = await _crawl_categories(fetcher, browser, target_categories)
     finally:
-        browser.close()
+        await browser.close()
         if s3:
             s3.finalize(success=success)
 
@@ -98,11 +106,13 @@ def main():
     print("=" * 60)
 
     try:
-        products = run_crawl(
-            target_categories=target,
-            s3_bucket=args.s3_bucket or None,
-            headless=args.headless,
-            person=args.person,
+        products = asyncio.run(
+            run_crawl(
+                target_categories=target,
+                s3_bucket=args.s3_bucket or None,
+                headless=args.headless,
+                person=args.person,
+            )
         )
     except KeyboardInterrupt:
         print("\n🛑 크롤링이 사용자에 의해 중단되었습니다.")

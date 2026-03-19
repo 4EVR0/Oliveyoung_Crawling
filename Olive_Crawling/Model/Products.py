@@ -1,4 +1,3 @@
-from datetime import datetime
 from crawler.Utils import canonicalize_goods_url
 
 
@@ -14,6 +13,6 @@ def make_product_dict(url, main_cat, sub_cat) -> dict:
         "product_info":  {},
         "rating":        "",
         "review_count":  "",
-        "review_stats":  {},   # ← 고정 구조 대신 빈 딕셔너리
-        "crawled_at":    datetime.now().isoformat(),
+        "review_stats":  {},
+        "crawled_at":    "",   # 파싱 완료 후 UTC로 채움
     }

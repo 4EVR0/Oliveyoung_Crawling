@@ -1,5 +1,6 @@
 import asyncio
 import re
+from datetime import datetime, timezone
 
 from config.Settings import (
     PAGE_TIMEOUT,
@@ -103,7 +104,6 @@ class ProductFetcher:
                 if not new_urls:
                     break
 
-                # 직전 페이지와 완전히 같으면 종료
                 if new_urls == prev_urls:
                     break
 
@@ -166,6 +166,9 @@ class ProductFetcher:
 
                 parser = Parser(page)
                 product = await parser.parse_product(url, main_cat, sub_cat)
+
+                if product:
+                    product["crawled_at"] = datetime.now(timezone.utc).isoformat()
 
                 if CRAWL_DELAY > 0:
                     await asyncio.sleep(CRAWL_DELAY)

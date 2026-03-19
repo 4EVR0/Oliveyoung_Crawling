@@ -1,15 +1,13 @@
-
-
 services:
   crawler:
     build: .
     env_file:
       - .env
-    shm_size: '2gb'      # 공유 메모리를 2GB로 확장 (필수)
+    shm_size: '2gb'
     deploy:
       resources:
         limits:
-          memory: 4G    # 컨테이너 전체 메모리 제한 확장
+          memory: 4G
     environment:
       - PYTHONUNBUFFERED=1
       - S3_BUCKET=${S3_BUCKET}
@@ -17,10 +15,9 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=ap-northeast-2
       - PERSON=${PERSON}
+      - DETAIL_CONCURRENCY=${DETAIL_CONCURRENCY:-10}
+      - PAGE_SIZE=${PAGE_SIZE:-20}
     command: ["--person", "${PERSON}", "--s3-bucket", "${S3_BUCKET}"]
     volumes:
-      # 크롤링 결과 로컬에 저장
       - ./output:/app/output
-      # 임시 파일 (재시작 시 복구용)
       - ./temp_crawl:/app/temp_crawl
-

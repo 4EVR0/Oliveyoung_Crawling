@@ -1,5 +1,17 @@
 import os
 
+
+def _get_int_env(name: str, default: int) -> int:
+    value = os.environ.get(name, str(default))
+    try:
+        parsed = int(value)
+        if parsed > 0:
+            return parsed
+    except (TypeError, ValueError):
+        pass
+    return default
+
+
 # 경로
 TEMP_DIR = "temp_crawl"
 
@@ -19,5 +31,5 @@ S3_BUCKET       = os.environ.get("S3_BUCKET", "")
 PERSON          = os.environ.get("PERSON", "")
 
 # async 병렬 옵션
-DETAIL_CONCURRENCY = int(os.environ.get("DETAIL_CONCURRENCY", "5"))
-PAGE_SIZE          = int(os.environ.get("PAGE_SIZE", "20"))
+DETAIL_CONCURRENCY = _get_int_env("DETAIL_CONCURRENCY", 10)
+PAGE_SIZE          = _get_int_env("PAGE_SIZE", 20)

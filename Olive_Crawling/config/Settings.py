@@ -31,5 +31,5 @@ S3_BUCKET       = os.environ.get("S3_BUCKET", "")
 PERSON          = os.environ.get("PERSON", "")
 
 # async 병렬 옵션
-DETAIL_CONCURRENCY = _get_int_env("DETAIL_CONCURRENCY", 10)
+DETAIL_CONCURRENCY = _get_int_env("DETAIL_CONCURRENCY", 7)
 PAGE_SIZE          = _get_int_env("PAGE_SIZE", 20)

@@ -15,7 +15,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_DEFAULT_REGION=ap-northeast-2
       - PERSON=${PERSON}
-      - DETAIL_CONCURRENCY=${DETAIL_CONCURRENCY:-10}
+      - DETAIL_CONCURRENCY=${DETAIL_CONCURRENCY:-7}
       - PAGE_SIZE=${PAGE_SIZE:-20}
     command: ["--person", "${PERSON}", "--s3-bucket", "${S3_BUCKET}"]
     volumes:

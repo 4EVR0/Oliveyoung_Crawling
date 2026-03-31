@@ -21,3 +21,4 @@ PERSON          = os.environ.get("PERSON", "")
 # async 병렬 옵션
 DETAIL_CONCURRENCY = int(os.environ.get("DETAIL_CONCURRENCY", "5"))
 PAGE_SIZE          = int(os.environ.get("PAGE_SIZE", "20"))
+

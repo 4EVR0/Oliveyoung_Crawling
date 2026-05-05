@@ -54,9 +54,9 @@ async def run_crawl(
     target_categories: dict,
     s3_bucket: Optional[str],
     headless: bool,
-    person: str = None,
+    person: str | None = None,
 ):
-    checkpoint = CheckpointManager(person=person)
+    checkpoint = CheckpointManager(person=person, bucket=s3_bucket)
     s3 = (
         S3Uploader(bucket=s3_bucket, run_id=checkpoint._state["run_id"])
         if s3_bucket else None

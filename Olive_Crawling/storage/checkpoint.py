@@ -37,15 +37,38 @@ from config.Settings import TEMP_DIR
 
 class CheckpointManager:
 
-    def __init__(self, person: str = None):
+    def __init__(self, person: str | None = None, bucket: str | None = None):
         os.makedirs(TEMP_DIR, exist_ok=True)
         self.person = person or "default"
         self.CHECKPOINT_FILE = os.path.join(TEMP_DIR, f"checkpoint_{self.person}.json")
         self._state = self._load()
+        if bucket:
+            self._sync_from_s3_manifest(bucket, self._state["run_id"])
         self.save()
+
     # ------------------------------------------------------------------ #
     #  로드 / 저장
     # ------------------------------------------------------------------ #
+
+    def _sync_from_s3_manifest(self, bucket: str, run_id: str) -> None:
+        """S3 manifest에서 completed_subcategories를 merge한다. 실패는 무시."""
+        try:
+            import boto3
+            from cosme_common import s3_paths
+
+            s3_client = boto3.client("s3")
+            key = s3_paths.manifest_key(run_id)
+            response = s3_client.get_object(Bucket=bucket, Key=key)
+            manifest = json.loads(response["Body"].read().decode("utf-8"))
+
+            s3_completed = set(manifest.get("completed_subcategories", []))
+            local_completed = set(self._state.get("completed_subcategories", []))
+            merged = local_completed | s3_completed
+            if len(merged) > len(local_completed):
+                self._state["completed_subcategories"] = list(merged)
+                print(f"  🔄 S3 manifest 동기화: {len(merged) - len(local_completed)}개 서브카테고리 추가")
+        except Exception:
+            pass  # S3 조회 실패는 무시하고 로컬 파일만 사용
 
     def _load(self) -> dict:
         """기존 체크포인트 파일이 있으면 자동으로 이어받고, 없으면 새로 생성"""

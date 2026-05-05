@@ -61,6 +61,8 @@ class S3Uploader:
             self._manifest = existing_data
             self._manifest["status"] = "in_progress"
             self._manifest["last_checkpoint"] = datetime.now().isoformat()
+            # 이전 버전 manifest에 키가 없을 경우 초기화
+            self._manifest.setdefault("completed_subcategories", [])
 
             print(
                 f"  🔄 S3 Manifest 복구 완료: "
@@ -155,12 +157,23 @@ class S3Uploader:
             self._buffer[key] = self._buffer[key][PART_SIZE:]
             self._upload_part(main_cat, sub_cat, chunk)
 
-    def flush_subcategory(self, main_cat: str, sub_cat: str):
-        """특정 서브카테고리 버퍼를 강제로 비워 업로드한다."""
+    def flush_subcategory(self, main_cat: str, sub_cat: str) -> None:
+        """버퍼를 업로드하고, S3 manifest에 서브카테고리 완료를 원자적으로 기록한다."""
         key = (main_cat, sub_cat)
         if self._buffer.get(key):
             self._upload_part(main_cat, sub_cat, self._buffer[key])
             self._buffer[key] = []
+
+        cat_key = f"{main_cat}/{sub_cat}"
+        completed = self._manifest.setdefault("completed_subcategories", [])
+        if cat_key not in completed:
+            completed.append(cat_key)
+        self._put_manifest()
+
+    def is_subcategory_uploaded(self, main_cat: str, sub_cat: str) -> bool:
+        """S3 manifest 기준으로 이미 업로드 완료된 서브카테고리인지 확인한다."""
+        cat_key = f"{main_cat}/{sub_cat}"
+        return cat_key in self._manifest.get("completed_subcategories", [])
 
     def flush_all(self):
         """남은 모든 버퍼를 업로드한다."""
@@ -258,3 +271,11 @@ class S3Uploader:
         self._put_manifest()
 
         print(f"  📤 S3 업로드: {s3_key} ({len(products)}개)")
+
+
+if __name__ == "__main__":
+    # python storage/S3_Uploader.py <bucket> <run_id>
+    # → manifest를 로드해서 completed_subcategories 출력
+    import sys
+    uploader = S3Uploader(bucket=sys.argv[1], run_id=sys.argv[2])
+    print(uploader._manifest.get("completed_subcategories", []))

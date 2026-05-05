@@ -35,6 +35,10 @@ class ProductFetcher:
             print("  ⏭️ 이미 완료된 서브카테고리 — 스킵")
             return []
 
+        if self.s3 and self.s3.is_subcategory_uploaded(main_cat, sub_cat):
+            print("  ⏭️ S3 manifest 기준 이미 업로드 완료 — 스킵")
+            return []
+
         product_urls = await self._get_product_urls(main_cat, sub_cat)
         if not product_urls:
             print("  ⚠️ 수집할 URL 없음")

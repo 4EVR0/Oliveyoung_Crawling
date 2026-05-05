@@ -10,8 +10,9 @@ python main.py                                # 로컬 저장만
 
 import argparse
 import asyncio
-from datetime import datetime
 from typing import Optional
+
+from cosme_common.batch import build_batch_id
 
 from config.Categories import CATEGORIES, PERSON_CATEGORIES
 from config.Settings import S3_BUCKET, PERSON
@@ -118,7 +119,7 @@ def main():
         print("\n🛑 크롤링이 사용자에 의해 중단되었습니다.")
         return
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = build_batch_id()
     save_json(products, f"oliveyoung_products_{ts}.json")
     save_csv(products, f"oliveyoung_products_{ts}.csv")
 

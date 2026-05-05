@@ -31,6 +31,8 @@
 import json
 import os
 from datetime import datetime
+
+from cosme_common.batch import build_batch_id
 from config.Settings import TEMP_DIR
 
 class CheckpointManager:
@@ -57,7 +59,7 @@ class CheckpointManager:
                 pass
 
         # 없으면 새 run_id 로 생성
-        new_run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        new_run_id = build_batch_id()
         print(f"🆕 새 run_id 생성: {new_run_id}")
         return {
             "run_id":                  new_run_id,

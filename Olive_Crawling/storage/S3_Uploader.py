@@ -9,6 +9,7 @@ from botocore.exceptions import ClientError
 
 from config.Settings import PART_SIZE, S3_MAX_RETRIES
 from crawler.Utils import safe_name
+from cosme_common import s3_paths
 
 
 class S3Uploader:
@@ -47,7 +48,7 @@ class S3Uploader:
     # ------------------------------------------------------------------ #
 
     def _manifest_key(self) -> str:
-        return f"oliveyoung/_manifests/run_id={self.run_id}/manifest.json"
+        return s3_paths.manifest_key(self.run_id)
 
     def _load_existing_manifest(self):
         """S3에서 기존 manifest.json을 찾아 상태를 복구한다."""
@@ -105,7 +106,7 @@ class S3Uploader:
 
     def _make_prefix(self, main_cat: str, sub_cat: str) -> str:
         return (
-            f"oliveyoung/{safe_name(main_cat)}/{safe_name(sub_cat)}"
+            f"{s3_paths.BRONZE_PREFIX}/{safe_name(main_cat)}/{safe_name(sub_cat)}"
             f"/run_id={self.run_id}"
         )
 

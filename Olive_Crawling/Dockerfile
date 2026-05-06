@@ -19,8 +19,8 @@ RUN mkdir -p temp_crawl
 
 # 환경변수
 ENV S3_BUCKET=""
+ENV RUN_ID=""
 ENV AWS_DEFAULT_REGION="ap-northeast-2"
-ENV PERSON=""
 
 # 실행 (olivecrawler.py → main.py)
 ENTRYPOINT ["python", "main.py"]

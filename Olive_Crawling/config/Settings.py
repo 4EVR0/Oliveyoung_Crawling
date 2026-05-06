@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 # 경로
 TEMP_DIR = "temp_crawl"
@@ -15,8 +16,8 @@ PART_SIZE       = 100      # part 파일당 최대 상품 수
 S3_MAX_RETRIES  = 3        # S3 업로드 재시도 횟수
 
 # 환경변수
-S3_BUCKET       = os.environ.get("S3_BUCKET", "")
-PERSON          = os.environ.get("PERSON", "")
+S3_BUCKET = os.environ.get("S3_BUCKET", "")
+RUN_ID    = os.environ.get("RUN_ID", datetime.now().strftime("%Y%m%d_%H%M%S"))
 
 # async 병렬 옵션
 DETAIL_CONCURRENCY = int(os.environ.get("DETAIL_CONCURRENCY", "5"))

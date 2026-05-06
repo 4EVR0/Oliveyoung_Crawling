@@ -32,8 +32,7 @@ import json
 import os
 from datetime import datetime
 
-from cosme_common.batch import build_batch_id
-from config.Settings import TEMP_DIR
+from config.Settings import TEMP_DIR, RUN_ID
 
 class CheckpointManager:
 
@@ -81,8 +80,8 @@ class CheckpointManager:
             except Exception:
                 pass
 
-        # 없으면 새 run_id 로 생성
-        new_run_id = build_batch_id()
+        # 없으면 RUN_ID 환경변수 사용 (Airflow 주입값, 없으면 타임스탬프)
+        new_run_id = RUN_ID
         print(f"🆕 새 run_id 생성: {new_run_id}")
         return {
             "run_id":                  new_run_id,

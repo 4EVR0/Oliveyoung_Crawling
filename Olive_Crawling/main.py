@@ -10,17 +10,23 @@ python main.py                                # 로컬 저장만
 
 import argparse
 import asyncio
+import logging
+import sys
 from typing import Optional
 
 from cosme_common.batch import build_batch_id
+from cosme_common.logging import job_unit
 
-from config.Categories import CATEGORIES, PERSON_CATEGORIES
-from config.Settings import S3_BUCKET, PERSON
+from config.Categories import CATEGORIES
+from config.Settings import S3_BUCKET
 from crawler.Browser import BrowserManager
 from crawler.Product_Fetcher import ProductFetcher
 from storage.checkpoint import CheckpointManager
 from storage.S3_Uploader import S3Uploader
 from storage.FileWriter import save_json, save_csv
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
 
 
 async def _crawl_categories(
@@ -57,49 +63,39 @@ async def run_crawl(
     person: str | None = None,
 ):
     checkpoint = CheckpointManager(person=person, bucket=s3_bucket)
-    s3 = (
-        S3Uploader(bucket=s3_bucket, run_id=checkpoint._state["run_id"])
-        if s3_bucket else None
-    )
+    run_id = checkpoint._state["run_id"]
 
-    browser = BrowserManager(headless=headless)
-    await browser.start()
-    fetcher = ProductFetcher(browser=browser, checkpoint=checkpoint, s3=s3)
+    with job_unit(logger, job="oliveyoung_crawl", run_id=run_id):
+        s3 = (
+            S3Uploader(bucket=s3_bucket, run_id=run_id)
+            if s3_bucket else None
+        )
 
-    all_products: list[dict] = []
-    success = True
+        browser = BrowserManager(headless=headless)
+        await browser.start()
+        fetcher = ProductFetcher(browser=browser, checkpoint=checkpoint, s3=s3)
 
-    try:
-        all_products, success = await _crawl_categories(fetcher, browser, target_categories)
-    finally:
-        await browser.close()
-        if s3:
-            s3.finalize(success=success)
+        all_products: list[dict] = []
+        success = True
 
-    return all_products
+        try:
+            all_products, success = await _crawl_categories(fetcher, browser, target_categories)
+        finally:
+            await browser.close()
+            if s3:
+                s3.finalize(success=success)
+
+        return all_products
 
 
-def main():
+def _main_impl():
     parser = argparse.ArgumentParser(description="올리브영 화장품 크롤러")
     parser.add_argument("--s3-bucket", default=S3_BUCKET, help="S3 버킷 이름")
-    parser.add_argument(
-        "--person",
-        default=PERSON,
-        choices=list(PERSON_CATEGORIES.keys()) + [""],
-        help="담당자 이름",
-    )
     parser.add_argument("--headless", action="store_true", default=True)
     args = parser.parse_args()
 
-    if args.person:
-        target = PERSON_CATEGORIES[args.person]
-        label = f"담당자: {args.person}"
-    else:
-        target = CATEGORIES
-        label = "전체 크롤링"
-
     print("=" * 60)
-    print(f"올리브영 크롤러 | {label}")
+    print("올리브영 크롤러 | 전체 크롤링")
     if args.s3_bucket:
         print(f"S3 버킷: {args.s3_bucket}")
     else:
@@ -109,23 +105,32 @@ def main():
     try:
         products = asyncio.run(
             run_crawl(
-                target_categories=target,
+                target_categories=CATEGORIES,
                 s3_bucket=args.s3_bucket or None,
                 headless=args.headless,
-                person=args.person,
+                person=None,
             )
         )
     except KeyboardInterrupt:
         print("\n🛑 크롤링이 사용자에 의해 중단되었습니다.")
-        return
-
-    ts = build_batch_id()
-    save_json(products, f"oliveyoung_products_{ts}.json")
-    save_csv(products, f"oliveyoung_products_{ts}.csv")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ 크롤링 실패: {e}")
+        sys.exit(1)
 
     print(f"\n{'=' * 60}")
     print(f"완료 — 총 {len(products)}개 상품 수집")
     print(f"{'=' * 60}")
+
+    # S3 없을 때만 로컬 저장 (로컬 개발/테스트용)
+    if not args.s3_bucket:
+        ts = build_batch_id()
+        save_json(products, f"oliveyoung_products_{ts}.json")
+        save_csv(products, f"oliveyoung_products_{ts}.csv")
+
+
+def main():
+    _main_impl()
 
 
 if __name__ == "__main__":

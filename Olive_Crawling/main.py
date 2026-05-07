@@ -14,7 +14,7 @@ import logging
 import sys
 from typing import Optional
 
-from oliveyoung_common.batch import build_batch_id
+from oliveyoung_common.batch import build_run_id
 from oliveyoung_common.logging import job_unit
 
 from config.Categories import CATEGORIES
@@ -124,7 +124,7 @@ def _main_impl():
 
     # S3 없을 때만 로컬 저장 (로컬 개발/테스트용)
     if not args.s3_bucket:
-        ts = build_batch_id()
+        ts = build_run_id("oliveyoung_crawl")
         save_json(products, f"oliveyoung_products_{ts}.json")
         save_csv(products, f"oliveyoung_products_{ts}.csv")
 

@@ -1,6 +1,6 @@
 import os
 
-from oliveyoung_common.batch import build_batch_id
+from oliveyoung_common.batch import build_run_id
 
 # 경로
 TEMP_DIR = "temp_crawl"
@@ -18,7 +18,7 @@ S3_MAX_RETRIES  = 3        # S3 업로드 재시도 횟수
 
 # 환경변수
 S3_BUCKET = os.environ.get("S3_BUCKET", "")
-RUN_ID    = os.environ.get("RUN_ID", build_batch_id())
+RUN_ID    = os.environ.get("RUN_ID", build_run_id("oliveyoung_crawl"))
 
 # async 병렬 옵션
 DETAIL_CONCURRENCY = int(os.environ.get("DETAIL_CONCURRENCY", "5"))

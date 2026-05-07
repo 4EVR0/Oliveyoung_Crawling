@@ -1,0 +1,3 @@
+[submodule "Olive_Crawling/cosme_common"]
+	path = Olive_Crawling/cosme_common
+	url = https://github.com/4EVR0/cosme_common.git

@@ -29,3 +29,4 @@ Thumbs.db
 .omc/
 CLAUDE.md
 dev.sh
+session-report-*.html

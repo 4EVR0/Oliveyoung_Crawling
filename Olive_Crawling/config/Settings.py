@@ -1,6 +1,6 @@
 import os
 
-from cosme_common.batch import build_batch_id
+from oliveyoung_common.batch import build_batch_id
 
 # 경로
 TEMP_DIR = "temp_crawl"

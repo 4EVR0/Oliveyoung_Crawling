@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 
 from config.Settings import PART_SIZE, S3_MAX_RETRIES
 from crawler.Utils import safe_name
-from cosme_common import s3_paths
+from oliveyoung_common import s3_paths
 
 
 class S3Uploader:

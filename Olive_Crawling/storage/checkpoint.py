@@ -53,7 +53,7 @@ class CheckpointManager:
         """S3 manifest에서 completed_subcategories를 merge한다. 실패는 무시."""
         try:
             import boto3
-            from cosme_common import s3_paths
+            from oliveyoung_common import s3_paths
 
             s3_client = boto3.client("s3")
             key = s3_paths.manifest_key(run_id)

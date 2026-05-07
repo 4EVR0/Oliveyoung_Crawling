@@ -14,8 +14,8 @@ import logging
 import sys
 from typing import Optional
 
-from cosme_common.batch import build_batch_id
-from cosme_common.logging import job_unit
+from oliveyoung_common.batch import build_batch_id
+from oliveyoung_common.logging import job_unit
 
 from config.Categories import CATEGORIES
 from config.Settings import S3_BUCKET

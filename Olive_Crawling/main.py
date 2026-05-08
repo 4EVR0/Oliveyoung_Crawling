@@ -16,6 +16,7 @@ from typing import Optional
 
 from oliveyoung_common.batch import build_run_id
 from oliveyoung_common.logging import job_unit
+from oliveyoung_common.logging import setup_logging
 
 from config.Categories import CATEGORIES
 from config.Settings import S3_BUCKET
@@ -24,6 +25,8 @@ from crawler.Product_Fetcher import ProductFetcher
 from storage.checkpoint import CheckpointManager
 from storage.S3_Uploader import S3Uploader
 from storage.FileWriter import save_json, save_csv
+
+setup_logging("oliveyoung-crawl")
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)

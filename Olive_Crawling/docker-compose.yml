@@ -23,4 +23,12 @@ services:
       - ./output:/app/output
       # 임시 파일 (재시작 시 복구용)
       - ./temp_crawl:/app/temp_crawl
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_DEFAULT_REGION:-ap-northeast-2}
+        awslogs-group: /4evr0/crawl
+        awslogs-stream-prefix: crawl
+        awslogs-create-group: "true"
+        awslogs-datetime-format: ""
 

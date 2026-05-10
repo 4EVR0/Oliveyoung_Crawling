@@ -1,7 +1,6 @@
 import os
 from datetime import datetime, timedelta
 from airflow import DAG
-from airflow.operators.bash import BashOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.docker.operators.docker import DockerOperator
 
@@ -19,14 +18,6 @@ with DAG(
     },
     tags=["oliveyoung", "crawling"],
 ) as dag:
-
-    ecr_login = BashOperator(
-        task_id="ecr_login",
-        bash_command=(
-            "aws ecr get-login-password --region ap-northeast-2 "
-            "| docker login --username AWS --password-stdin $ECR_REGISTRY"
-        ),
-    )
 
     crawl = DockerOperator(
         task_id="crawl",
@@ -54,4 +45,4 @@ with DAG(
         wait_for_completion=False,
     )
 
-    ecr_login >> crawl >> trigger_etl
+    crawl >> trigger_etl

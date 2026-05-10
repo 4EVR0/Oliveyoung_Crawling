@@ -27,6 +27,7 @@ oliveyoung_temp.json
 Thumbs.db
 
 .omc/
+.claude/
 CLAUDE.md
 dev.sh
 session-report-*.html

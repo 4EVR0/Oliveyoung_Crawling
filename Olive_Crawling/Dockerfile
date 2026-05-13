@@ -8,11 +8,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 소스 코드 복사 (디렉토리 구조 전체)
-COPY config/   ./config/
-COPY crawler/  ./crawler/
-COPY storage/  ./storage/
-COPY Model/    ./Model/
-COPY main.py   .
+COPY config/            ./config/
+COPY crawler/           ./crawler/
+COPY storage/           ./storage/
+COPY Model/             ./Model/
+COPY oliveyoung_common/ ./oliveyoung_common/
+COPY main.py            .
 
 # 임시 저장 디렉토리 생성
 RUN mkdir -p temp_crawl

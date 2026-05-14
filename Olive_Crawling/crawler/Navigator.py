@@ -80,22 +80,61 @@ class Navigator:
                 await asyncio.sleep(1)
 
             main_link = self.page.locator(f"a:has-text('{main_cat}')").first
-            if await main_link.is_visible(timeout=3000):
-                await main_link.hover()
-                await asyncio.sleep(1)
-
-            sub_link = self.page.locator(
-                f"a:has-text('{main_cat}') >> xpath=../../.. >> a:has-text('{sub_cat}')"
-            ).first
-
-            if not await sub_link.is_visible(timeout=3000):
-                print(f"    ⚠️ 서브메뉴에서 '{sub_cat}' 못 찾음")
+            if not await main_link.is_visible(timeout=3000):
+                print(f"    ⚠️ 메인 카테고리 '{main_cat}' 못 찾음")
                 return False
 
-            await sub_link.click()
-            await asyncio.sleep(3)
-            print(f"    ✅ 이동 완료: {await self.page.title()}")
-            return True
+            # headless 서버에서 hover()만으로 CSS :hover 미발동 → dispatch_event 병행
+            await main_link.hover()
+            await main_link.dispatch_event("mouseenter")
+            await asyncio.sleep(1.5)
+
+            # DOM 구조에 따라 XPath 깊이가 다를 수 있어 1~4단계 순차 탐색
+            for depth in ["xpath=..", "xpath=../..", "xpath=../../..", "xpath=../../../.."]:
+                try:
+                    sub_link = self.page.locator(
+                        f"a:has-text('{main_cat}') >> {depth} >> a:has-text('{sub_cat}')"
+                    ).first
+                    if await sub_link.is_visible(timeout=1000):
+                        await sub_link.click()
+                        await asyncio.sleep(3)
+                        print(f"    ✅ 이동 완료 (hover): {await self.page.title()}")
+                        return True
+                except Exception:
+                    continue
+
+            # fallback: 메인 카테고리 페이지로 직접 이동 후 LNB에서 서브카테고리 탐색
+            print(f"    ↩️ hover 방식 실패 → 메인 카테고리 직접 이동으로 재시도")
+            main_href = await main_link.get_attribute("href")
+            if main_href:
+                nav_url = main_href if main_href.startswith("http") else f"https://www.oliveyoung.co.kr{main_href}"
+                await self.page.goto(nav_url, wait_until="domcontentloaded", timeout=20_000)
+            else:
+                await main_link.click()
+                await self.page.wait_for_load_state("domcontentloaded", timeout=15_000)
+            await asyncio.sleep(2)
+
+            for lnb_sel in [
+                f".lnbMenu a:has-text('{sub_cat}')",
+                f".cateList a:has-text('{sub_cat}')",
+                f"#lnbMenu a:has-text('{sub_cat}')",
+                f".leftMenu a:has-text('{sub_cat}')",
+                f"aside a:has-text('{sub_cat}')",
+                f"nav a:has-text('{sub_cat}')",
+                f"a:has-text('{sub_cat}')",
+            ]:
+                try:
+                    sub_link = self.page.locator(lnb_sel).first
+                    if await sub_link.is_visible(timeout=1000):
+                        await sub_link.click()
+                        await asyncio.sleep(3)
+                        print(f"    ✅ 이동 완료 (LNB fallback): {await self.page.title()}")
+                        return True
+                except Exception:
+                    continue
+
+            print(f"    ⚠️ 서브메뉴에서 '{sub_cat}' 못 찾음")
+            return False
 
         except Exception as e:
             print(f"    ❌ 카테고리 이동 실패: {e}")

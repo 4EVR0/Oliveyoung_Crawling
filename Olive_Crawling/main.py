@@ -28,7 +28,6 @@ from storage.FileWriter import save_json, save_csv
 
 setup_logging("oliveyoung-crawl")
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 

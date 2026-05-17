@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 from datetime import datetime, timezone
 
@@ -15,6 +16,8 @@ from crawler.Parser import Parser
 from storage.checkpoint import CheckpointManager
 from storage.S3_Uploader import S3Uploader
 
+logger = logging.getLogger(__name__)
+
 
 class ProductFetcher:
     def __init__(
@@ -28,20 +31,19 @@ class ProductFetcher:
         self.s3 = s3
 
     async def fetch_subcategory(self, main_cat: str, sub_cat: str) -> list[dict]:
-        print(f"\n{'=' * 60}")
-        print(f"수집 시작: {main_cat} > {sub_cat}")
+        logger.info("수집 시작: %s > %s", main_cat, sub_cat)
 
         if self.checkpoint.is_subcategory_done(main_cat, sub_cat):
-            print("  ⏭️ 이미 완료된 서브카테고리 — 스킵")
+            logger.info("이미 완료된 서브카테고리 — 스킵: %s > %s", main_cat, sub_cat)
             return []
 
         if self.s3 and self.s3.is_subcategory_uploaded(main_cat, sub_cat):
-            print("  ⏭️ S3 manifest 기준 이미 업로드 완료 — 스킵")
+            logger.info("S3 manifest 기준 이미 업로드 완료 — 스킵: %s > %s", main_cat, sub_cat)
             return []
 
         product_urls = await self._get_product_urls(main_cat, sub_cat)
         if not product_urls:
-            print("  ⚠️ 수집할 URL 없음")
+            logger.warning("수집할 URL 없음: %s > %s", main_cat, sub_cat)
             return []
 
         completed_pages = self.checkpoint.get_completed_pages(main_cat, sub_cat)
@@ -52,7 +54,7 @@ class ProductFetcher:
 
         for page_num, page_urls in pages.items():
             if page_num in completed_pages:
-                print(f"  ⏭️ 페이지 {page_num} 스킵 (이미 완료)")
+                logger.info("페이지 %d 스킵 (이미 완료)", page_num)
                 continue
 
             page_products = await self._fetch_page_products(
@@ -65,19 +67,19 @@ class ProductFetcher:
 
             self.checkpoint.mark_page_done(main_cat, sub_cat, page_num)
             all_products.extend(page_products)
-            print(f"  ✅ 페이지 {page_num} 완료 ({len(page_products)}개)")
+            logger.info("페이지 %d 완료 (%d개)", page_num, len(page_products))
 
         self.checkpoint.mark_subcategory_done(main_cat, sub_cat)
         if self.s3:
             self.s3.save_manifest_checkpoint()
 
-        print(f"\n✓ '{main_cat} > {sub_cat}' 완료 — 총 {len(all_products)}개")
+        logger.info("'%s > %s' 완료 — 총 %d개", main_cat, sub_cat, len(all_products))
         return all_products
 
     async def _get_product_urls(self, main_cat: str, sub_cat: str) -> list[str]:
         cached = self.checkpoint.get_cached_urls(main_cat, sub_cat)
         if cached:
-            print(f"  📂 URL 캐시 사용: {len(cached)}개")
+            logger.info("URL 캐시 사용: %d개", len(cached))
             return cached
 
         nav = Navigator(self.browser.page)
@@ -88,6 +90,7 @@ class ProductFetcher:
             return []
 
         all_urls = []
+        assert self.browser.page is not None
         current_url = self.browser.page.url
         page_num = 1
         prev_urls = None
@@ -116,12 +119,12 @@ class ProductFetcher:
                 page_num += 1
 
             except Exception as e:
-                print(f"  ⚠️ URL 수집 중단: {str(e)[:80]}")
+                logger.warning("URL 수집 중단: %s", str(e)[:80])
                 break
 
         all_urls = list(dict.fromkeys(all_urls))
         self.checkpoint.set_cached_urls(main_cat, sub_cat, all_urls)
-        print(f"  🔎 URL 수집 완료: {len(all_urls)}개")
+        logger.info("URL 수집 완료: %d개", len(all_urls))
         return all_urls
 
     def _group_urls_by_page(self, urls: list[str], page_size: int) -> dict[int, list[str]]:
@@ -142,7 +145,7 @@ class ProductFetcher:
 
         async def worker(idx: int, url: str):
             async with sem:
-                print(f"    [{page_num}-{idx + 1}/{len(urls)}] {url[-30:]}")
+                logger.debug("[%d-%d/%d] %s", page_num, idx + 1, len(urls), url[-30:])
                 return await self._fetch_single_with_retry(url, main_cat, sub_cat)
 
         tasks = [worker(i, url) for i, url in enumerate(urls)]
@@ -150,8 +153,8 @@ class ProductFetcher:
 
         products = []
         for result in results:
-            if isinstance(result, Exception):
-                print(f"    ✗ 수집 실패(스킵): {str(result)[:80]}")
+            if isinstance(result, BaseException):
+                logger.warning("수집 실패(스킵): %s", str(result)[:80])
                 continue
             if result and result.get("name"):
                 products.append(result)
@@ -195,7 +198,7 @@ class ProductFetcher:
                     await self.browser.restart()
 
                 if attempt < RETRY_COUNT - 1:
-                    print(f"      ⚠️ 재시도 {attempt + 1}/{RETRY_COUNT}: {str(e)[:60]}")
+                    logger.warning("재시도 %d/%d: %s", attempt + 1, RETRY_COUNT, str(e)[:60])
                     await asyncio.sleep(2 ** attempt)
                 else:
                     raise

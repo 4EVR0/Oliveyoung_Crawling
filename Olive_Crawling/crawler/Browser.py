@@ -1,5 +1,8 @@
 import asyncio
+import logging
 from playwright.async_api import async_playwright, Page, Browser, BrowserContext
+
+logger = logging.getLogger(__name__)
 
 
 class BrowserManager:
@@ -40,7 +43,7 @@ class BrowserManager:
         await self.page.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
         )
-        print("🌐 브라우저 시작 완료")
+        logger.info("브라우저 시작 완료")
 
     async def close(self):
         try:
@@ -62,10 +65,10 @@ class BrowserManager:
             pass
 
         self.browser = self.context = self.page = self._playwright = None
-        print("🔒 브라우저 종료")
+        logger.info("브라우저 종료")
 
     async def restart(self, delay: float = 5.0):
-        print("♻️ 브라우저 재시작 중...")
+        logger.info("브라우저 재시작 중...")
         await self.close()
         await asyncio.sleep(delay)
         await self.start()

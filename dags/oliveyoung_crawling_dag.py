@@ -26,6 +26,7 @@ with DAG(
         mount_tmp_dir=False,
         force_pull=False,
         mem_limit="4g",
+        shm_size=2 * 1024 * 1024 * 1024,
         environment={
             "S3_BUCKET": S3_BUCKET,
             "RUN_ID": "{{ ds_nodash }}",

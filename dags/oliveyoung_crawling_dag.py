@@ -21,7 +21,7 @@ with DAG(
         task_id="crawl",
         image=f"{ECR_REGISTRY}/evr0/oliveyoung-crawling:latest",
         docker_url="unix://var/run/docker.sock",
-        network_mode="bridge",
+        network_mode="host",
         auto_remove="success",
         mount_tmp_dir=False,
         force_pull=True,

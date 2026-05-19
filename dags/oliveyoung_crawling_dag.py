@@ -1,35 +1,31 @@
 import os
+import json
 from datetime import datetime, timedelta
 from airflow import DAG
-from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from airflow.providers.docker.operators.docker import DockerOperator
+from airflow.providers.http.operators.http import SimpleHttpOperator
 
 ECR_REGISTRY = os.environ.get("ECR_REGISTRY", "")
 S3_BUCKET = os.environ.get("OLIVEYOUNG_S3_BUCKET", "")
 
 with DAG(
     dag_id="oliveyoung_crawling",
-    schedule="0 2 */3 * *",  # 3일마다 새벽 2시
+    schedule="0 2 */3 * *",
     start_date=datetime(2026, 1, 1),
     catchup=False,
-    default_args={
-        "retries": 1,
-        "retry_delay": timedelta(minutes=10),
-    },
+    default_args={"retries": 1, "retry_delay": timedelta(minutes=10)},
     tags=["oliveyoung", "crawling"],
 ) as dag:
 
     crawl = DockerOperator(
         task_id="crawl",
         image=f"{ECR_REGISTRY}/evr0/oliveyoung-crawling:latest",
-        command=f"--s3-bucket {S3_BUCKET}",
         docker_url="unix://var/run/docker.sock",
         network_mode="host",
         auto_remove="success",
         mount_tmp_dir=False,
         force_pull=True,
         mem_limit="4g",
-        shm_size=2 * 1024 * 1024 * 1024,  # 2GB — Playwright 필수
         environment={
             "S3_BUCKET": S3_BUCKET,
             "RUN_ID": "{{ ds_nodash }}",
@@ -40,10 +36,14 @@ with DAG(
         execution_timeout=timedelta(hours=6),
     )
 
-    trigger_etl = TriggerDagRunOperator(
-        task_id="trigger_etl",
-        trigger_dag_id="oliveyoung_bronze_to_silver",
-        wait_for_completion=False,
+    trigger_ec2 = SimpleHttpOperator(
+        task_id="trigger_ec2_pipeline",
+        http_conn_id="ec2_airflow",
+        endpoint="/api/v1/dags/oliveyoung_bronze_to_silver/dagRuns",
+        method="POST",
+        data=json.dumps({"conf": {}}),
+        headers={"Content-Type": "application/json"},
+        response_check=lambda response: response.status_code == 200,
     )
 
-    crawl >> trigger_etl
+    crawl >> trigger_ec2

@@ -1,6 +1,7 @@
-# 환경변수
+ㅐ# 환경변수
 .env
-
+aws/
+awscliv2.zip
 # 임시 크롤링 데이터
 temp_crawl/
 

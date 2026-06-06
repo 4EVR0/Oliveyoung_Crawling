@@ -1,0 +1,9 @@
+services:
+  crawler:
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_DEFAULT_REGION:-ap-northeast-2}
+        awslogs-group: /4evr0/crawl
+        awslogs-stream-prefix: crawl
+        awslogs-create-group: "true"

@@ -24,7 +24,7 @@ with DAG(
         network_mode="host",
         auto_remove="success",
         mount_tmp_dir=False,
-        force_pull=True,
+        force_pull=False,
         mem_limit="4g",
         shm_size=2 * 1024 * 1024 * 1024,
         environment={

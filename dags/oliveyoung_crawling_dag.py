@@ -40,7 +40,7 @@ with DAG(
     trigger_ec2 = SimpleHttpOperator(
         task_id="trigger_ec2_pipeline",
         http_conn_id="ec2_airflow",
-        endpoint="/api/v1/dags/oliveyoung_bronze_to_silver/dagRuns",
+        endpoint="/api/v1/dags/oliveyoung_pipeline/dagRuns",
         method="POST",
         data=json.dumps({"conf": {}}),
         headers={"Content-Type": "application/json"},

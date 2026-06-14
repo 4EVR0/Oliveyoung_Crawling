@@ -11,6 +11,8 @@ PAGE_TIMEOUT    = 30_000   # ms
 NAV_TIMEOUT     = 60_000   # ms
 CRAWL_DELAY     = 2.0      # 상품 상세 간 대기(초)
 RETRY_COUNT     = 3        # 상품 상세 재시도 횟수
+CATEGORY_RETRY_COUNT = int(os.environ.get("CATEGORY_RETRY_COUNT", "2"))
+CATEGORY_RETRY_DELAY = float(os.environ.get("CATEGORY_RETRY_DELAY", "5"))
 
 # S3
 PART_SIZE       = 100      # part 파일당 최대 상품 수

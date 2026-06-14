@@ -75,9 +75,6 @@ class Parser:
         await self._parse_disclosure(product)
         await self._parse_review_stats(product)
 
-        stats_found = bool(product.get("review_stats"))
-        review_status = "✓" if stats_found else "△"
-        print(f"      {review_status} {product['brand']} - {product['name'][:25]}...")
         return product
 
     async def _parse_disclosure(self, product: dict):

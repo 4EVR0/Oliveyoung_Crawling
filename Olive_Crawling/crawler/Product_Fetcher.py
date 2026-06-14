@@ -19,6 +19,10 @@ from storage.S3_Uploader import S3Uploader
 logger = logging.getLogger(__name__)
 
 
+class CategoryNavigationError(RuntimeError):
+    """카테고리 메뉴 탐색 실패로 URL 수집을 시작하지 못한 경우."""
+
+
 class ProductFetcher:
     def __init__(
         self,
@@ -58,7 +62,11 @@ class ProductFetcher:
                 continue
 
             page_products = await self._fetch_page_products(
-                page_urls, main_cat, sub_cat, page_num
+                page_urls,
+                main_cat,
+                sub_cat,
+                page_num,
+                total_urls=len(product_urls),
             )
 
             if self.s3 and page_products:
@@ -87,7 +95,9 @@ class ProductFetcher:
 
         await nav.go_home()
         if not await nav.go_to_subcategory(main_cat, sub_cat):
-            return []
+            raise CategoryNavigationError(
+                f"카테고리 이동 실패: {main_cat} > {sub_cat}"
+            )
 
         all_urls = []
         assert self.browser.page is not None
@@ -140,13 +150,26 @@ class ProductFetcher:
         main_cat: str,
         sub_cat: str,
         page_num: int,
+        total_urls: int,
     ) -> list[dict]:
         sem = asyncio.Semaphore(DETAIL_CONCURRENCY)
+        page_offset = (page_num - 1) * PAGE_SIZE
 
         async def worker(idx: int, url: str):
             async with sem:
                 logger.debug("[%d-%d/%d] %s", page_num, idx + 1, len(urls), url[-30:])
-                return await self._fetch_single_with_retry(url, main_cat, sub_cat)
+                product = await self._fetch_single_with_retry(url, main_cat, sub_cat)
+                if product and product.get("name"):
+                    review_status = "✓" if product.get("review_stats") else "△"
+                    logger.info(
+                        "[상품 %d/%d] %s %s - %s",
+                        page_offset + idx + 1,
+                        total_urls,
+                        review_status,
+                        product.get("brand", ""),
+                        product["name"],
+                    )
+                return product
 
         tasks = [worker(i, url) for i, url in enumerate(urls)]
         results = await asyncio.gather(*tasks, return_exceptions=True)

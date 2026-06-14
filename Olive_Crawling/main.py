@@ -19,9 +19,9 @@ from oliveyoung_common.logging import job_unit
 from oliveyoung_common.logging import setup_logging
 
 from config.Categories import CATEGORIES
-from config.Settings import S3_BUCKET
+from config.Settings import CATEGORY_RETRY_COUNT, CATEGORY_RETRY_DELAY, S3_BUCKET
 from crawler.Browser import BrowserManager
-from crawler.Product_Fetcher import ProductFetcher
+from crawler.Product_Fetcher import CategoryNavigationError, ProductFetcher
 from storage.checkpoint import CheckpointManager
 from storage.S3_Uploader import S3Uploader
 from storage.FileWriter import save_json, save_csv
@@ -36,15 +36,23 @@ async def _crawl_categories(
     browser: BrowserManager,
     target_categories: dict,
 ) -> tuple[list[dict], bool]:
-    """카테고리 순회 + 수집. (all_products, success) 반환"""
+    """카테고리 순회 후 이동 실패 카테고리만 모아 재시도한다."""
     all_products: list[dict] = []
     success = True
+    navigation_failures: list[tuple[str, str]] = []
 
     for main_cat, sub_cats in target_categories.items():
         for sub_cat in sub_cats:
             try:
                 products = await fetcher.fetch_subcategory(main_cat, sub_cat)
                 all_products.extend(products)
+            except CategoryNavigationError:
+                navigation_failures.append((main_cat, sub_cat))
+                logger.warning(
+                    "카테고리 이동 실패 기억: %s > %s (전체 순회 후 재시도)",
+                    main_cat,
+                    sub_cat,
+                )
             except KeyboardInterrupt:
                 print("\n⛔ 사용자 중단 감지 (Ctrl+C)")
                 success = False
@@ -54,6 +62,59 @@ async def _crawl_categories(
                 success = False
                 if any(k in str(e).lower() for k in ("crashed", "closed", "net::err")):
                     await browser.restart()
+
+    for retry_round in range(1, CATEGORY_RETRY_COUNT + 1):
+        if not navigation_failures:
+            break
+
+        logger.warning(
+            "카테고리 이동 실패 %d개 재시도 시작 (%d/%d)",
+            len(navigation_failures),
+            retry_round,
+            CATEGORY_RETRY_COUNT,
+        )
+        await asyncio.sleep(CATEGORY_RETRY_DELAY)
+
+        retry_targets = navigation_failures
+        navigation_failures = []
+
+        for main_cat, sub_cat in retry_targets:
+            try:
+                products = await fetcher.fetch_subcategory(main_cat, sub_cat)
+                all_products.extend(products)
+                logger.info("카테고리 재시도 성공: %s > %s", main_cat, sub_cat)
+            except CategoryNavigationError:
+                navigation_failures.append((main_cat, sub_cat))
+                logger.warning(
+                    "카테고리 재시도 실패: %s > %s (%d/%d)",
+                    main_cat,
+                    sub_cat,
+                    retry_round,
+                    CATEGORY_RETRY_COUNT,
+                )
+            except KeyboardInterrupt:
+                print("\n⛔ 사용자 중단 감지 (Ctrl+C)")
+                success = False
+                raise
+            except Exception as e:
+                print(f"  ❌ '{main_cat} > {sub_cat}' 재시도 오류: {e}")
+                success = False
+                if any(
+                    k in str(e).lower()
+                    for k in ("crashed", "closed", "net::err")
+                ):
+                    await browser.restart()
+
+    if navigation_failures:
+        success = False
+        failed_names = ", ".join(
+            f"{main_cat} > {sub_cat}" for main_cat, sub_cat in navigation_failures
+        )
+        logger.error(
+            "카테고리 이동 최종 실패 %d개: %s",
+            len(navigation_failures),
+            failed_names,
+        )
 
     return all_products, success
 

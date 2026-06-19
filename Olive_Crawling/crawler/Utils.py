@@ -1,6 +1,16 @@
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 
+def extract_goods_no(url: str) -> str:
+    """올리브영 상세 URL에서 goodsNo 상품번호를 추출한다."""
+    try:
+        parsed = urlparse(url)
+        qs = parse_qs(parsed.query)
+        return (qs.get("goodsNo") or [""])[0]
+    except Exception:
+        return ""
+
+
 def canonicalize_goods_url(url: str) -> str:
     """
     올리브영 상세 URL 에서 goodsNo 파라미터만 남겨 정규화.
@@ -8,8 +18,7 @@ def canonicalize_goods_url(url: str) -> str:
     """
     try:
         parsed  = urlparse(url)
-        qs      = parse_qs(parsed.query)
-        goods_no = (qs.get("goodsNo") or [None])[0]
+        goods_no = extract_goods_no(url)
         if not goods_no:
             return url
         new_query = urlencode({"goodsNo": goods_no})

@@ -30,6 +30,8 @@ setup_logging("oliveyoung-crawl")
 
 logger = logging.getLogger(__name__)
 
+CODE_VERSION = "20260624-nav-domcontentloaded"
+
 
 async def _crawl_categories(
     fetcher: ProductFetcher,
@@ -159,6 +161,7 @@ def _main_impl():
 
     print("=" * 60)
     print("올리브영 크롤러 | 전체 크롤링")
+    print(f"코드 버전: {CODE_VERSION}")
     if args.s3_bucket:
         print(f"S3 버킷: {args.s3_bucket}")
     else:

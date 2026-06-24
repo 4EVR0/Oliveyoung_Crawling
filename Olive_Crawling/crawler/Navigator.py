@@ -12,8 +12,29 @@ class Navigator:
         self.page = page
 
     async def go_home(self):
-        await self.page.goto(BASE_URL, wait_until="networkidle", timeout=30_000)
-        await asyncio.sleep(3)
+        await self.page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30_000)
+
+        ready_selectors = [
+            "button:has-text('카테고리')",
+            "a:has-text('카테고리')",
+            "a:has-text('스킨케어')",
+            "header",
+            "#Header",
+        ]
+        for selector in ready_selectors:
+            try:
+                ready = self.page.locator(selector).first
+                if await ready.is_visible(timeout=5_000):
+                    logger.info("홈 진입 완료: selector=%s title=%s", selector, await self.page.title())
+                    return
+            except Exception:
+                continue
+
+        logger.warning(
+            "홈 진입 후 주요 selector 미확인: url=%s title=%s",
+            self.page.url,
+            await self.page.title(),
+        )
 
     async def get_total_pages(self) -> int:
         """

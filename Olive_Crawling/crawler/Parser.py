@@ -1,5 +1,6 @@
 import asyncio
 import re
+from urllib.parse import urljoin
 from playwright.async_api import Page
 from config.Settings import BASE_URL
 from config.Categories import COSMETIC_KEYWORDS
@@ -72,10 +73,46 @@ class Parser:
         except Exception:
             pass
 
+        product["image_url"] = await self._parse_image_url()
+
         await self._parse_disclosure(product)
         await self._parse_review_stats(product)
 
         return product
+
+    async def _parse_image_url(self) -> str:
+        selectors = [
+            "meta[property='og:image']",
+            "meta[name='twitter:image']",
+            "#mainImg",
+            ".prd_img img",
+            ".prd_thumb img",
+            "img[src*='goods']",
+        ]
+
+        for selector in selectors:
+            try:
+                locator = self.page.locator(selector).first
+                image_url = ""
+                if selector.startswith("meta"):
+                    image_url = await locator.get_attribute("content") or ""
+                else:
+                    image_url = (
+                        await locator.get_attribute("src")
+                        or await locator.get_attribute("data-src")
+                        or ""
+                    )
+                image_url = image_url.strip()
+                if image_url:
+                    return self._normalize_url(image_url)
+            except Exception:
+                continue
+        return ""
+
+    def _normalize_url(self, url: str) -> str:
+        if url.startswith("//"):
+            return f"https:{url}"
+        return urljoin(BASE_URL, url)
 
     async def _parse_disclosure(self, product: dict):
         try:

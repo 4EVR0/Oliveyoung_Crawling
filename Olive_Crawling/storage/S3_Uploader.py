@@ -2,7 +2,8 @@ import json
 import time
 from io import BytesIO
 from datetime import datetime
-from typing import Optional
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 import boto3
 from botocore.exceptions import ClientError
@@ -10,6 +11,14 @@ from botocore.exceptions import ClientError
 from config.Settings import PART_SIZE, S3_MAX_RETRIES
 from crawler.Utils import safe_name
 from oliveyoung_common import s3_paths
+
+IMAGE_CONTENT_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
 
 
 class S3Uploader:
@@ -175,6 +184,43 @@ class S3Uploader:
         cat_key = f"{main_cat}/{sub_cat}"
         return cat_key in self._manifest.get("completed_subcategories", [])
 
+    def upload_product_image(self, goods_no: str, image_url: str) -> str:
+        """상품 대표 이미지를 goodsNo 기준 S3 key에 저장하고 key를 반환한다."""
+        if not goods_no or not image_url:
+            return ""
+
+        ext = self._image_extension(image_url)
+        s3_key = self._image_key(goods_no, ext)
+        if self._object_exists(s3_key):
+            return s3_key
+
+        request = Request(
+            image_url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                )
+            },
+        )
+        with urlopen(request, timeout=20) as response:
+            data = response.read()
+            content_type = response.headers.get("Content-Type", "").split(";")[0]
+
+        ext = self._image_extension(image_url, content_type)
+        s3_key = self._image_key(goods_no, ext)
+        if self._object_exists(s3_key):
+            return s3_key
+
+        self.s3.put_object(
+            Bucket=self.bucket,
+            Key=s3_key,
+            Body=BytesIO(data),
+            ContentType=content_type or IMAGE_CONTENT_TYPES.get(ext, "image/jpeg"),
+        )
+        return s3_key
+
     def flush_all(self):
         """남은 모든 버퍼를 업로드한다."""
         for (main_cat, sub_cat), products in list(self._buffer.items()):
@@ -271,6 +317,22 @@ class S3Uploader:
         self._put_manifest()
 
         print(f"  📤 S3 업로드: {s3_key} ({len(products)}개)")
+
+    def _image_key(self, goods_no: str, ext: str) -> str:
+        image_prefix = getattr(s3_paths, "IMAGE_PREFIX", "oliveyoung_images")
+        return f"{image_prefix}/goodsNo={safe_name(goods_no)}/main{ext}"
+
+    def _image_extension(self, image_url: str, content_type: str = "") -> str:
+        content_type = content_type.lower()
+        for ext, mapped_content_type in IMAGE_CONTENT_TYPES.items():
+            if content_type == mapped_content_type:
+                return ".jpg" if ext == ".jpeg" else ext
+
+        path = urlparse(image_url).path.lower()
+        for ext in IMAGE_CONTENT_TYPES:
+            if path.endswith(ext):
+                return ".jpg" if ext == ".jpeg" else ext
+        return ".jpg"
 
 
 if __name__ == "__main__":

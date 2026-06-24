@@ -13,7 +13,8 @@ def save_csv(products: list, filename: str):
 
     info_keys    = sorted({k for p in products for k in p.get("product_info", {})})
     base_headers = ["name", "brand", "main_category", "sub_category",
-                    "price", "ingredients", "url", "crawled_at"]
+                    "price", "image_url", "image_s3_key", "ingredients",
+                    "url", "goods_no", "crawled_at"]
 
     with open(filename, "w", encoding="utf-8-sig", newline="") as f:
         writer = csv.writer(f)

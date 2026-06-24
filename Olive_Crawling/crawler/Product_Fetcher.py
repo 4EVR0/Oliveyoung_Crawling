@@ -198,6 +198,7 @@ class ProductFetcher:
                 product = await parser.parse_product(url, main_cat, sub_cat)
 
                 if product:
+                    await self._upload_product_image(product)
                     product["crawled_at"] = datetime.now(timezone.utc).isoformat()
 
                 if CRAWL_DELAY > 0:
@@ -225,3 +226,18 @@ class ProductFetcher:
                     await asyncio.sleep(2 ** attempt)
                 else:
                     raise
+
+    async def _upload_product_image(self, product: dict) -> None:
+        if not self.s3:
+            return
+
+        try:
+            image_s3_key = await asyncio.to_thread(
+                self.s3.upload_product_image,
+                product.get("goods_no", ""),
+                product.get("image_url", ""),
+            )
+            if image_s3_key:
+                product["image_s3_key"] = image_s3_key
+        except Exception as e:
+            logger.warning("이미지 S3 업로드 실패(계속 진행): %s", str(e)[:80])

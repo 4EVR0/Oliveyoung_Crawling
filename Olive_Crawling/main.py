@@ -15,7 +15,7 @@ import sys
 from typing import Optional
 
 from oliveyoung_common.batch import build_run_id
-from oliveyoung_common.logging import job_unit
+from oliveyoung_common.logging import job_unit, log_dq
 from oliveyoung_common.logging import setup_logging
 
 from config.Categories import CATEGORIES
@@ -42,12 +42,14 @@ async def _crawl_categories(
     all_products: list[dict] = []
     success = True
     navigation_failures: list[tuple[str, str]] = []
+    category_counts: dict[str, int] = {}
 
     for main_cat, sub_cats in target_categories.items():
         for sub_cat in sub_cats:
             try:
                 products = await fetcher.fetch_subcategory(main_cat, sub_cat)
                 all_products.extend(products)
+                category_counts[f"{main_cat}>{sub_cat}"] = len(products)
             except CategoryNavigationError:
                 navigation_failures.append((main_cat, sub_cat))
                 logger.warning(
@@ -84,6 +86,7 @@ async def _crawl_categories(
             try:
                 products = await fetcher.fetch_subcategory(main_cat, sub_cat)
                 all_products.extend(products)
+                category_counts[f"{main_cat}>{sub_cat}"] = len(products)
                 logger.info("카테고리 재시도 성공: %s > %s", main_cat, sub_cat)
             except CategoryNavigationError:
                 navigation_failures.append((main_cat, sub_cat))
@@ -118,7 +121,7 @@ async def _crawl_categories(
             failed_names,
         )
 
-    return all_products, success
+    return all_products, success, navigation_failures, category_counts
 
 
 async def run_crawl(
@@ -142,13 +145,27 @@ async def run_crawl(
 
         all_products: list[dict] = []
         success = True
+        nav_failures: list[tuple[str, str]] = []
+        category_counts: dict[str, int] = {}
 
         try:
-            all_products, success = await _crawl_categories(fetcher, browser, target_categories)
+            all_products, success, nav_failures, category_counts = await _crawl_categories(fetcher, browser, target_categories)
         finally:
             await browser.close()
             if s3:
                 s3.finalize(success=success)
+
+        # 정합성 메트릭 — 수집 안정성 + 적재 보존(crawl쪽)
+        categories_total = sum(len(subs) for subs in target_categories.values())
+        log_dq(
+            logger,
+            stage="crawl",
+            run_id=run_id,
+            products_total=len(all_products),
+            categories_total=categories_total,
+            categories_failed=len(nav_failures),
+            categories_zero=sum(1 for c in category_counts.values() if c == 0),
+        )
 
         return all_products
 

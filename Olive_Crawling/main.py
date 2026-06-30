@@ -30,7 +30,7 @@ setup_logging("oliveyoung-crawl")
 
 logger = logging.getLogger(__name__)
 
-CODE_VERSION = "20260624-nav-domcontentloaded"
+CODE_VERSION = "20260630-nav-domcontentloaded"
 
 
 async def _crawl_categories(

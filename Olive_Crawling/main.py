@@ -11,6 +11,7 @@ python main.py                                # 로컬 저장만
 import argparse
 import asyncio
 import logging
+import os
 import sys
 from typing import Optional
 
@@ -124,6 +125,29 @@ async def _crawl_categories(
     return all_products, success, navigation_failures, category_counts
 
 
+def _write_crawl_dq(run_id: str, **metrics) -> None:
+    """crawl 정합성 수치를 dq_metrics 테이블에 적재한다.
+
+    ICEBERG_WAREHOUSE_PATH가 없거나 pyiceberg 미설치면 조용히 건너뛴다(로그로만).
+    적재 실패가 크롤링을 절대 깨지 않도록 비치명적 처리.
+    """
+    warehouse = os.environ.get("ICEBERG_WAREHOUSE_PATH")
+    if not warehouse:
+        return
+    try:
+        from pyiceberg.catalog import load_catalog
+        from oliveyoung_common.dq_metrics import write_dq_metrics
+
+        catalog = load_catalog("glue", **{
+            "type": "glue",
+            "warehouse": warehouse,
+            "s3.region": os.environ.get("AWS_DEFAULT_REGION", "ap-northeast-2"),
+        })
+        write_dq_metrics(catalog, stage="crawl", batch_job=run_id, **metrics)
+    except Exception as e:
+        logger.warning("dq_metrics 적재 실패(무시): %s", e)
+
+
 async def run_crawl(
     target_categories: dict,
     s3_bucket: Optional[str],
@@ -133,7 +157,7 @@ async def run_crawl(
     checkpoint = CheckpointManager(person=person, bucket=s3_bucket)
     run_id = checkpoint._state["run_id"]
 
-    with job_unit(logger, job="oliveyoung_crawl", run_id=run_id):
+    with job_unit(logger, job="oliveyoung_crawl", run_id=run_id, code_version=CODE_VERSION):
         s3 = (
             S3Uploader(bucket=s3_bucket, run_id=run_id)
             if s3_bucket else None
@@ -157,15 +181,15 @@ async def run_crawl(
 
         # 정합성 메트릭 — 수집 안정성 + 적재 보존(crawl쪽)
         categories_total = sum(len(subs) for subs in target_categories.values())
-        log_dq(
-            logger,
-            stage="crawl",
-            run_id=run_id,
+        metrics = dict(
             products_total=len(all_products),
             categories_total=categories_total,
             categories_failed=len(nav_failures),
             categories_zero=sum(1 for c in category_counts.values() if c == 0),
         )
+        # 로그(Loki) + 테이블(dq_metrics) 이중 기록, 같은 수치
+        log_dq(logger, stage="crawl", run_id=run_id, **metrics)
+        _write_crawl_dq(run_id, **metrics)
 
         return all_products
 

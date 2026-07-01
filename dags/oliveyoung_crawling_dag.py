@@ -24,7 +24,7 @@ with DAG(
         network_mode="host",
         auto_remove="success",
         mount_tmp_dir=False,
-        force_pull=False,
+        force_pull=True,
         mem_limit="4g",
         shm_size=2 * 1024 * 1024 * 1024,
         environment={
@@ -33,8 +33,9 @@ with DAG(
             "AWS_DEFAULT_REGION": "ap-northeast-2",
             "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID", ""),
             "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
+            "ICEBERG_WAREHOUSE_PATH": os.environ.get("ICEBERG_WAREHOUSE_PATH", "s3://oliveyoung-crawl-data/olive_young_iceberg_metadata/")
         },
-        execution_timeout=timedelta(hours=6),
+        execution_timeout=None,
     )
 
     trigger_ec2 = SimpleHttpOperator(

@@ -20,7 +20,7 @@ from oliveyoung_common.logging import job_unit, log_dq
 from oliveyoung_common.logging import setup_logging
 
 from config.Categories import CATEGORIES
-from config.Settings import CATEGORY_RETRY_COUNT, CATEGORY_RETRY_DELAY, S3_BUCKET
+from config.Settings import BATCH_DATE, CATEGORY_RETRY_COUNT, CATEGORY_RETRY_DELAY, S3_BUCKET
 from crawler.Browser import BrowserManager
 from crawler.Product_Fetcher import CategoryNavigationError, ProductFetcher
 from storage.checkpoint import CheckpointManager
@@ -125,7 +125,7 @@ async def _crawl_categories(
     return all_products, success, navigation_failures, category_counts
 
 
-def _write_crawl_dq(run_id: str, **metrics) -> None:
+def _write_crawl_dq(batch_date: str, run_id: str, **metrics) -> None:
     """crawl 정합성 수치를 dq_metrics 테이블에 적재한다.
 
     ICEBERG_WAREHOUSE_PATH가 없거나 pyiceberg 미설치면 조용히 건너뛴다(로그로만).
@@ -143,7 +143,7 @@ def _write_crawl_dq(run_id: str, **metrics) -> None:
             "warehouse": warehouse,
             "s3.region": os.environ.get("AWS_DEFAULT_REGION", "ap-northeast-2"),
         })
-        write_dq_metrics(catalog, stage="crawl", batch_job=run_id, **metrics)
+        write_dq_metrics(catalog, stage="crawl", batch_date=batch_date, run_id=run_id, **metrics)
     except Exception as e:
         logger.warning("dq_metrics 적재 실패(무시): %s", e)
 
@@ -189,7 +189,7 @@ async def run_crawl(
         )
         # 로그(Loki) + 테이블(dq_metrics) 이중 기록, 같은 수치
         log_dq(logger, stage="crawl", run_id=run_id, **metrics)
-        _write_crawl_dq(run_id, **metrics)
+        _write_crawl_dq(BATCH_DATE, run_id, **metrics)
 
         return all_products
 

@@ -30,6 +30,7 @@ with DAG(
         environment={
             "S3_BUCKET": S3_BUCKET,
             "RUN_ID": "{{ ds_nodash }}",
+            "BATCH_DATE": "{{ data_interval_end | ds }}",
             "AWS_DEFAULT_REGION": "ap-northeast-2",
             "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID", ""),
             "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
@@ -43,7 +44,7 @@ with DAG(
         http_conn_id="ec2_airflow",
         endpoint="/api/v1/dags/oliveyoung_pipeline/dagRuns",
         method="POST",
-        data=json.dumps({"conf": {}}),
+        data=json.dumps({"conf": {"batch_date": "{{ data_interval_end | ds }}"}}),
         headers={"Content-Type": "application/json"},
         response_check=lambda response: response.status_code == 200,
     )

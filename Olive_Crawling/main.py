@@ -143,7 +143,11 @@ def _write_crawl_dq(batch_date: str, run_id: str, **metrics) -> None:
             "warehouse": warehouse,
             "s3.region": os.environ.get("AWS_DEFAULT_REGION", "ap-northeast-2"),
         })
-        write_dq_metrics(catalog, stage="crawl", batch_date=batch_date, run_id=run_id, **metrics)
+        # 웹훅 있으면 완료 리포트도 전송(옵트인·비치명적) → #파이프라인-리포트
+        write_dq_metrics(
+            catalog, stage="crawl", batch_date=batch_date, run_id=run_id,
+            report_webhook=os.environ.get("DISCORD_DQ_WEBHOOK_URL"), **metrics,
+        )
     except Exception as e:
         logger.warning("dq_metrics 적재 실패(무시): %s", e)
 

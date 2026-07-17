@@ -34,7 +34,8 @@ with DAG(
             "AWS_DEFAULT_REGION": "ap-northeast-2",
             "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID", ""),
             "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
-            "ICEBERG_WAREHOUSE_PATH": os.environ.get("ICEBERG_WAREHOUSE_PATH", "s3://oliveyoung-crawl-data/olive_young_iceberg_metadata/")
+            "ICEBERG_WAREHOUSE_PATH": os.environ.get("ICEBERG_WAREHOUSE_PATH", "s3://oliveyoung-crawl-data/olive_young_iceberg_metadata/"),
+            "DISCORD_DQ_WEBHOOK_URL": os.environ.get("DISCORD_DQ_WEBHOOK_URL", ""),  # crawl 완료 리포트(없으면 미전송)
         },
         execution_timeout=None,
     )

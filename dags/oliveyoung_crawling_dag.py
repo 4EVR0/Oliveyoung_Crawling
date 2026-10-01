@@ -33,6 +33,7 @@ with DAG(
             "RUN_ID": "{{ ds_nodash }}",
             "BATCH_DATE": "{{ data_interval_end | ds }}",
             "AIRFLOW_DAG_RUN_ID": "{{ run_id }}",         # 같은 날짜 다른 dagRun 차단용 manifest 소유자
+            "CRAWL_TRY_NUMBER": "{{ ti.try_number }}",    # 재개 여부 DQ(crawl_attempt)
             "AWS_DEFAULT_REGION": "ap-northeast-2",
             "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID", ""),
             "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),

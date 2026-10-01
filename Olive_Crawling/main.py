@@ -25,6 +25,7 @@ from config.Settings import (
     BATCH_DATE,
     CATEGORY_RETRY_COUNT,
     CATEGORY_RETRY_DELAY,
+    CRAWL_TRY_NUMBER,
     RUN_ID,
     S3_BUCKET,
 )
@@ -233,6 +234,8 @@ async def run_crawl(
             )
 
         if metrics is not None:
+            if CRAWL_TRY_NUMBER:
+                metrics["crawl_attempt"] = CRAWL_TRY_NUMBER
             # 로그(Loki) + 테이블(dq_metrics) 이중 기록, 같은 수치
             log_dq(logger, stage="crawl", run_id=run_id, **metrics)
             _write_crawl_dq(BATCH_DATE, run_id, **metrics)

@@ -24,6 +24,7 @@ from config.Settings import BATCH_DATE, CATEGORY_RETRY_COUNT, CATEGORY_RETRY_DEL
 from crawler.Browser import BrowserManager
 from crawler.Product_Fetcher import CategoryNavigationError, ProductFetcher
 from storage.checkpoint import CheckpointManager
+from storage.crawl_summary import summarize_crawl
 from storage.S3_Uploader import S3Uploader
 from storage.FileWriter import save_json, save_csv
 
@@ -191,6 +192,7 @@ async def run_crawl(
         nav_failures: list[tuple[str, str]] = []
         category_counts: dict[str, int] = {}
         failures: dict[str, str] = {}
+        manifest: dict | None = None
 
         try:
             all_products, success, nav_failures, category_counts = await _crawl_categories(
@@ -200,19 +202,29 @@ async def run_crawl(
             await browser.close()
             if s3:
                 s3.set_failed_subcategories(failures)
-                s3.finalize(success=success)
+                manifest = s3.finalize(success=success)
 
-        # 정합성 메트릭 — 수집 안정성 + 적재 보존(crawl쪽)
-        categories_total = sum(len(subs) for subs in target_categories.values())
-        metrics = dict(
-            products_total=len(all_products),
-            categories_total=categories_total,
-            categories_failed=len(nav_failures),
-            categories_zero=sum(1 for c in category_counts.values() if c == 0),
-        )
-        # 로그(Loki) + 테이블(dq_metrics) 이중 기록, 같은 수치
-        log_dq(logger, stage="crawl", run_id=run_id, **metrics)
-        _write_crawl_dq(BATCH_DATE, run_id, **metrics)
+        # 정합성 메트릭 — S3 사용 시 manifest(run 누적) 기준, 재개해도 값이 같다
+        if s3 and manifest is not None:
+            try:
+                metrics = summarize_crawl(manifest, target_categories)
+            except Exception as e:
+                # 지표 실패가 크롤 성공·전처리 트리거를 막지 않게(비치명)
+                logger.warning("crawl DQ 지표 계산 실패(건너뜀): %s", e)
+                metrics = None
+        else:
+            categories_total = sum(len(subs) for subs in target_categories.values())
+            metrics = dict(
+                products_total=len(all_products),
+                categories_total=categories_total,
+                categories_failed=len(nav_failures),
+                categories_zero=sum(1 for c in category_counts.values() if c == 0),
+            )
+
+        if metrics is not None:
+            # 로그(Loki) + 테이블(dq_metrics) 이중 기록, 같은 수치
+            log_dq(logger, stage="crawl", run_id=run_id, **metrics)
+            _write_crawl_dq(BATCH_DATE, run_id, **metrics)
 
         return all_products
 

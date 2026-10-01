@@ -38,8 +38,12 @@ async def _crawl_categories(
     fetcher: ProductFetcher,
     browser: BrowserManager,
     target_categories: dict,
+    failures: dict[str, str],
 ) -> tuple[list[dict], bool]:
-    """카테고리 순회 후 이동 실패 카테고리만 모아 재시도한다."""
+    """카테고리 순회 후 이동 실패 카테고리만 모아 재시도한다.
+
+    failures에는 예외 종류와 관계없이 최종 실패 카테고리와 사유를 기록한다(재시도 흐름은 그대로).
+    """
     all_products: list[dict] = []
     success = True
     navigation_failures: list[tuple[str, str]] = []
@@ -53,6 +57,7 @@ async def _crawl_categories(
                 category_counts[f"{main_cat}>{sub_cat}"] = len(products)
             except CategoryNavigationError:
                 navigation_failures.append((main_cat, sub_cat))
+                failures[f"{main_cat}/{sub_cat}"] = "navigation"
                 logger.warning(
                     "카테고리 이동 실패 기억: %s > %s (전체 순회 후 재시도)",
                     main_cat,
@@ -64,6 +69,7 @@ async def _crawl_categories(
                 raise
             except Exception as e:
                 print(f"  ❌ '{main_cat} > {sub_cat}' 오류: {e}")
+                failures[f"{main_cat}/{sub_cat}"] = f"error: {str(e)[:100]}"
                 success = False
                 if any(k in str(e).lower() for k in ("crashed", "closed", "net::err")):
                     await browser.restart()
@@ -88,9 +94,11 @@ async def _crawl_categories(
                 products = await fetcher.fetch_subcategory(main_cat, sub_cat)
                 all_products.extend(products)
                 category_counts[f"{main_cat}>{sub_cat}"] = len(products)
+                failures.pop(f"{main_cat}/{sub_cat}", None)
                 logger.info("카테고리 재시도 성공: %s > %s", main_cat, sub_cat)
             except CategoryNavigationError:
                 navigation_failures.append((main_cat, sub_cat))
+                failures[f"{main_cat}/{sub_cat}"] = "navigation"
                 logger.warning(
                     "카테고리 재시도 실패: %s > %s (%d/%d)",
                     main_cat,
@@ -104,6 +112,7 @@ async def _crawl_categories(
                 raise
             except Exception as e:
                 print(f"  ❌ '{main_cat} > {sub_cat}' 재시도 오류: {e}")
+                failures[f"{main_cat}/{sub_cat}"] = f"error: {str(e)[:100]}"
                 success = False
                 if any(
                     k in str(e).lower()
@@ -120,6 +129,12 @@ async def _crawl_categories(
             "카테고리 이동 최종 실패 %d개: %s",
             len(navigation_failures),
             failed_names,
+        )
+    if failures:
+        logger.error(
+            "카테고리 최종 실패 %d개(사유 포함): %s",
+            len(failures),
+            ", ".join(f"{k} [{v}]" for k, v in failures.items()),
         )
 
     return all_products, success, navigation_failures, category_counts
@@ -175,12 +190,16 @@ async def run_crawl(
         success = True
         nav_failures: list[tuple[str, str]] = []
         category_counts: dict[str, int] = {}
+        failures: dict[str, str] = {}
 
         try:
-            all_products, success, nav_failures, category_counts = await _crawl_categories(fetcher, browser, target_categories)
+            all_products, success, nav_failures, category_counts = await _crawl_categories(
+                fetcher, browser, target_categories, failures
+            )
         finally:
             await browser.close()
             if s3:
+                s3.set_failed_subcategories(failures)
                 s3.finalize(success=success)
 
         # 정합성 메트릭 — 수집 안정성 + 적재 보존(crawl쪽)

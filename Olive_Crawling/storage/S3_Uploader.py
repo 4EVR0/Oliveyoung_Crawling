@@ -167,17 +167,30 @@ class S3Uploader:
             self._upload_part(main_cat, sub_cat, chunk)
 
     def flush_subcategory(self, main_cat: str, sub_cat: str) -> None:
-        """버퍼를 업로드하고, S3 manifest에 서브카테고리 완료를 원자적으로 기록한다."""
+        """버퍼를 업로드하고 manifest를 저장한다. 완료 기록은 mark_subcategory_complete에서만."""
         key = (main_cat, sub_cat)
         if self._buffer.get(key):
             self._upload_part(main_cat, sub_cat, self._buffer[key])
             self._buffer[key] = []
 
+        self._put_manifest()
+
+    def mark_subcategory_complete(self, main_cat: str, sub_cat: str) -> None:
+        """서브카테고리의 모든 묶음을 끝냈을 때만 완료로 기록한다(저장은 다음 manifest 저장 시)."""
         cat_key = f"{main_cat}/{sub_cat}"
         completed = self._manifest.setdefault("completed_subcategories", [])
         if cat_key not in completed:
             completed.append(cat_key)
-        self._put_manifest()
+
+    def set_expected_urls(self, main_cat: str, sub_cat: str, count: int) -> None:
+        """수집 대상 URL 수(기대치)를 기록한다. 재개 시 다시 모은 목록이면 덮어쓴다."""
+        cat_key = f"{main_cat}/{sub_cat}"
+        self._ensure_category_entry(cat_key)
+        self._manifest["categories"][cat_key]["expected_urls"] = count
+
+    def set_failed_subcategories(self, failures: dict[str, str]) -> None:
+        """최종 실패 카테고리와 사유를 기록한다(저장은 finalize 시)."""
+        self._manifest["failed_subcategories"] = dict(failures)
 
     def is_subcategory_uploaded(self, main_cat: str, sub_cat: str) -> bool:
         """S3 manifest 기준으로 이미 업로드 완료된 서브카테고리인지 확인한다."""

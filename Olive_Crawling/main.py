@@ -191,7 +191,12 @@ async def run_crawl(
 
     with job_unit(logger, job="oliveyoung_crawl", run_id=run_id, code_version=CODE_VERSION):
         s3 = (
-            S3Uploader(bucket=s3_bucket, run_id=run_id, owner_dag_run_id=AIRFLOW_DAG_RUN_ID or None)
+            S3Uploader(
+                bucket=s3_bucket,
+                run_id=run_id,
+                owner_dag_run_id=AIRFLOW_DAG_RUN_ID or None,
+                target_subcategories=[f"{m}/{s}" for m, subs in target_categories.items() for s in subs],
+            )
             if s3_bucket else None
         )
 

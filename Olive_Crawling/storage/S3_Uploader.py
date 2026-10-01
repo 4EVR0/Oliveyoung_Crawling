@@ -45,7 +45,13 @@ class S3Uploader:
     5. finalize / checkpoint 시 manifest 상태 갱신
     """
 
-    def __init__(self, bucket: str, run_id: str, owner_dag_run_id: str | None = None):
+    def __init__(
+        self,
+        bucket: str,
+        run_id: str,
+        owner_dag_run_id: str | None = None,
+        target_subcategories: list[str] | None = None,
+    ):
         self.s3 = boto3.client("s3")
         self.bucket = bucket
         self.run_id = run_id
@@ -65,6 +71,9 @@ class S3Uploader:
         # 같은 날짜 중복 실행 차단용 소유자(시작 전 check_run_owner로 판정 완료된 상태)
         if owner_dag_run_id:
             self._manifest.setdefault("owner_dag_run_id", owner_dag_run_id)
+        # 이번 run 수집 대상(main/sub) — 전처리 게이트·백필이 누락을 세는 기준
+        if target_subcategories:
+            self._manifest["target_subcategories"] = list(target_subcategories)
 
     # ------------------------------------------------------------------ #
     # manifest 로드/저장

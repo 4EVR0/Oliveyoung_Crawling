@@ -23,6 +23,8 @@ S3_BUCKET = os.environ.get("S3_BUCKET", "")
 RUN_ID    = os.environ.get("RUN_ID", build_run_id("oliveyoung_crawl"))
 # 단계 관통 논리 배치 날짜(YYYY-MM-DD). Airflow가 BATCH_DATE로 주입, 단독 실행 시 RUN_ID에서 파생.
 BATCH_DATE = os.environ.get("BATCH_DATE") or batch_date_from_run_id(RUN_ID)
+# Airflow dagRun ID — 같은 RUN_ID(날짜) manifest를 다른 dagRun이 이어 쓰지 못하게 소유자로 기록. 없으면 판정 생략.
+AIRFLOW_DAG_RUN_ID = os.environ.get("AIRFLOW_DAG_RUN_ID", "")
 
 # async 병렬 옵션
 DETAIL_CONCURRENCY = int(os.environ.get("DETAIL_CONCURRENCY", "5"))

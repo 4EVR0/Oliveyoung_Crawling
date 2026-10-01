@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Olive_Crawling"))
 
-from storage.crawl_summary import summarize_crawl  # noqa: E402
+from storage.crawl_summary import check_run_owner, summarize_crawl  # noqa: E402
 
 # 실제처럼 서브카테고리 이름에 '/'가 들어간 경우 포함
 TARGETS = {
@@ -116,3 +116,11 @@ def test_대상_밖_카테고리는_무시():
     assert m["categories_completed"] == 0
     assert m["categories_failed"] == 4
 
+
+def test_소유자_판정():
+    run = "scheduled__2026-10-01T02:00:00+00:00"
+    assert check_run_owner(None, run)[0] is True                                      # 새 run
+    assert check_run_owner({"owner_dag_run_id": run}, run)[0] is True                 # 재시도·Clear
+    assert check_run_owner({"owner_dag_run_id": "manual__x"}, run)[0] is False        # 다른 dagRun
+    assert check_run_owner({"total_products": 1}, run)[0] is False                    # 소유자 없는 기존
+    assert check_run_owner({"owner_dag_run_id": "manual__x"}, "")[0] is True          # Airflow 밖

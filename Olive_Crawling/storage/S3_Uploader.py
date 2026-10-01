@@ -21,6 +21,17 @@ IMAGE_CONTENT_TYPES = {
 }
 
 
+def load_manifest(bucket: str, run_id: str) -> dict | None:
+    """run_id의 S3 manifest를 읽는다. 없으면 None, 그 밖의 오류는 그대로 올린다."""
+    try:
+        response = boto3.client("s3").get_object(Bucket=bucket, Key=s3_paths.manifest_key(run_id))
+    except ClientError as e:
+        if e.response["Error"]["Code"] in ("NoSuchKey", "404", "NotFound"):
+            return None
+        raise
+    return json.loads(response["Body"].read().decode("utf-8"))
+
+
 class S3Uploader:
     """
     S3 업로드 전담 클래스.
@@ -34,7 +45,7 @@ class S3Uploader:
     5. finalize / checkpoint 시 manifest 상태 갱신
     """
 
-    def __init__(self, bucket: str, run_id: str):
+    def __init__(self, bucket: str, run_id: str, owner_dag_run_id: str | None = None):
         self.s3 = boto3.client("s3")
         self.bucket = bucket
         self.run_id = run_id
@@ -51,6 +62,9 @@ class S3Uploader:
         }
 
         self._load_existing_manifest()
+        # 같은 날짜 중복 실행 차단용 소유자(시작 전 check_run_owner로 판정 완료된 상태)
+        if owner_dag_run_id:
+            self._manifest.setdefault("owner_dag_run_id", owner_dag_run_id)
 
     # ------------------------------------------------------------------ #
     # manifest 로드/저장

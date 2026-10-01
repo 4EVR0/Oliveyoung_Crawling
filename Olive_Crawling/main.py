@@ -20,12 +20,19 @@ from oliveyoung_common.logging import job_unit, log_dq
 from oliveyoung_common.logging import setup_logging
 
 from config.Categories import CATEGORIES
-from config.Settings import BATCH_DATE, CATEGORY_RETRY_COUNT, CATEGORY_RETRY_DELAY, S3_BUCKET
+from config.Settings import (
+    AIRFLOW_DAG_RUN_ID,
+    BATCH_DATE,
+    CATEGORY_RETRY_COUNT,
+    CATEGORY_RETRY_DELAY,
+    RUN_ID,
+    S3_BUCKET,
+)
 from crawler.Browser import BrowserManager
 from crawler.Product_Fetcher import CategoryNavigationError, ProductFetcher
 from storage.checkpoint import CheckpointManager
-from storage.crawl_summary import summarize_crawl
-from storage.S3_Uploader import S3Uploader
+from storage.crawl_summary import check_run_owner, summarize_crawl
+from storage.S3_Uploader import S3Uploader, load_manifest
 from storage.FileWriter import save_json, save_csv
 
 setup_logging("oliveyoung-crawl")
@@ -174,12 +181,16 @@ async def run_crawl(
     headless: bool,
     person: str | None = None,
 ):
+    # checkpoint가 S3 manifest를 병합하기 전에, 같은 날짜의 다른 dagRun manifest인지 먼저 판정
+    if s3_bucket:
+        _assert_run_owner(s3_bucket, RUN_ID)
+
     checkpoint = CheckpointManager(person=person, bucket=s3_bucket)
     run_id = checkpoint._state["run_id"]
 
     with job_unit(logger, job="oliveyoung_crawl", run_id=run_id, code_version=CODE_VERSION):
         s3 = (
-            S3Uploader(bucket=s3_bucket, run_id=run_id)
+            S3Uploader(bucket=s3_bucket, run_id=run_id, owner_dag_run_id=AIRFLOW_DAG_RUN_ID or None)
             if s3_bucket else None
         )
 
@@ -227,6 +238,16 @@ async def run_crawl(
             _write_crawl_dq(BATCH_DATE, run_id, **metrics)
 
         return all_products
+
+
+def _assert_run_owner(s3_bucket: str, run_id: str) -> None:
+    """같은 run_id(날짜) manifest를 다른 dagRun이 이어 쓰려 하면 수집 전에 실패시킨다."""
+    if not AIRFLOW_DAG_RUN_ID:
+        return
+    ok, reason = check_run_owner(load_manifest(s3_bucket, run_id), AIRFLOW_DAG_RUN_ID)
+    logger.info("run 소유자 판정: run_id=%s, %s", run_id, reason)
+    if not ok:
+        raise RuntimeError(f"같은 날짜 중복 실행 차단(run_id={run_id}): {reason}")
 
 
 def _main_impl():

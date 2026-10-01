@@ -1,4 +1,4 @@
-"""크롤 run 요약 — manifest(run 누적) 기준 DQ 지표.
+"""크롤 run 요약 — manifest(run 누적) 기준 DQ 지표와 run 소유자 판정.
 
 boto3·브라우저 의존 없는 순수 함수만 둔다(로컬 단위 테스트 대상).
 """
@@ -55,3 +55,19 @@ def summarize_crawl(manifest: dict, target_categories: dict) -> dict:
     )
     return metrics
 
+
+def check_run_owner(manifest: dict | None, dag_run_id: str | None) -> tuple[bool, str]:
+    """같은 run_id(날짜)의 manifest를 다른 dagRun이 이어 쓰지 못하게 판정한다.
+
+    반환: (진행 가능 여부, 사유). 같은 dagRun의 재시도·Clear만 재개를 허용한다.
+    """
+    if not dag_run_id:
+        return True, "판정 생략(Airflow 밖 실행)"
+    if manifest is None:
+        return True, "새 run"
+    owner = manifest.get("owner_dag_run_id")
+    if owner is None:
+        return False, "소유 dagRun 기록이 없는 기존 manifest(구버전 또는 다른 실행)"
+    if owner != dag_run_id:
+        return False, f"다른 dagRun의 manifest: owner={owner}, current={dag_run_id}"
+    return True, "같은 dagRun 재시도 — 재개"

@@ -215,6 +215,9 @@ async def run_crawl(
             all_products, success, nav_failures, category_counts = await _crawl_categories(
                 fetcher, browser, target_categories, failures
             )
+        except BaseException:
+            success = False  # 예외 종료가 manifest에 completed로 남지 않게
+            raise
         finally:
             await browser.close()
             if s3:

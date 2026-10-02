@@ -20,11 +20,20 @@ from oliveyoung_common.logging import job_unit, log_dq
 from oliveyoung_common.logging import setup_logging
 
 from config.Categories import CATEGORIES
-from config.Settings import BATCH_DATE, CATEGORY_RETRY_COUNT, CATEGORY_RETRY_DELAY, S3_BUCKET
+from config.Settings import (
+    AIRFLOW_DAG_RUN_ID,
+    BATCH_DATE,
+    CATEGORY_RETRY_COUNT,
+    CATEGORY_RETRY_DELAY,
+    CRAWL_TRY_NUMBER,
+    RUN_ID,
+    S3_BUCKET,
+)
 from crawler.Browser import BrowserManager
 from crawler.Product_Fetcher import CategoryNavigationError, ProductFetcher
 from storage.checkpoint import CheckpointManager
-from storage.S3_Uploader import S3Uploader
+from storage.crawl_summary import check_run_owner, summarize_crawl
+from storage.S3_Uploader import S3Uploader, load_manifest
 from storage.FileWriter import save_json, save_csv
 
 setup_logging("oliveyoung-crawl")
@@ -38,8 +47,12 @@ async def _crawl_categories(
     fetcher: ProductFetcher,
     browser: BrowserManager,
     target_categories: dict,
+    failures: dict[str, str],
 ) -> tuple[list[dict], bool]:
-    """카테고리 순회 후 이동 실패 카테고리만 모아 재시도한다."""
+    """카테고리 순회 후 이동 실패 카테고리만 모아 재시도한다.
+
+    failures에는 예외 종류와 관계없이 최종 실패 카테고리와 사유를 기록한다(재시도 흐름은 그대로).
+    """
     all_products: list[dict] = []
     success = True
     navigation_failures: list[tuple[str, str]] = []
@@ -53,6 +66,7 @@ async def _crawl_categories(
                 category_counts[f"{main_cat}>{sub_cat}"] = len(products)
             except CategoryNavigationError:
                 navigation_failures.append((main_cat, sub_cat))
+                failures[f"{main_cat}/{sub_cat}"] = "navigation"
                 logger.warning(
                     "카테고리 이동 실패 기억: %s > %s (전체 순회 후 재시도)",
                     main_cat,
@@ -64,6 +78,7 @@ async def _crawl_categories(
                 raise
             except Exception as e:
                 print(f"  ❌ '{main_cat} > {sub_cat}' 오류: {e}")
+                failures[f"{main_cat}/{sub_cat}"] = f"error: {str(e)[:100]}"
                 success = False
                 if any(k in str(e).lower() for k in ("crashed", "closed", "net::err")):
                     await browser.restart()
@@ -88,9 +103,11 @@ async def _crawl_categories(
                 products = await fetcher.fetch_subcategory(main_cat, sub_cat)
                 all_products.extend(products)
                 category_counts[f"{main_cat}>{sub_cat}"] = len(products)
+                failures.pop(f"{main_cat}/{sub_cat}", None)
                 logger.info("카테고리 재시도 성공: %s > %s", main_cat, sub_cat)
             except CategoryNavigationError:
                 navigation_failures.append((main_cat, sub_cat))
+                failures[f"{main_cat}/{sub_cat}"] = "navigation"
                 logger.warning(
                     "카테고리 재시도 실패: %s > %s (%d/%d)",
                     main_cat,
@@ -104,6 +121,7 @@ async def _crawl_categories(
                 raise
             except Exception as e:
                 print(f"  ❌ '{main_cat} > {sub_cat}' 재시도 오류: {e}")
+                failures[f"{main_cat}/{sub_cat}"] = f"error: {str(e)[:100]}"
                 success = False
                 if any(
                     k in str(e).lower()
@@ -120,6 +138,12 @@ async def _crawl_categories(
             "카테고리 이동 최종 실패 %d개: %s",
             len(navigation_failures),
             failed_names,
+        )
+    if failures:
+        logger.error(
+            "카테고리 최종 실패 %d개(사유 포함): %s",
+            len(failures),
+            ", ".join(f"{k} [{v}]" for k, v in failures.items()),
         )
 
     return all_products, success, navigation_failures, category_counts
@@ -158,12 +182,21 @@ async def run_crawl(
     headless: bool,
     person: str | None = None,
 ):
+    # checkpoint가 S3 manifest를 병합하기 전에, 같은 날짜의 다른 dagRun manifest인지 먼저 판정
+    if s3_bucket:
+        _assert_run_owner(s3_bucket, RUN_ID)
+
     checkpoint = CheckpointManager(person=person, bucket=s3_bucket)
     run_id = checkpoint._state["run_id"]
 
     with job_unit(logger, job="oliveyoung_crawl", run_id=run_id, code_version=CODE_VERSION):
         s3 = (
-            S3Uploader(bucket=s3_bucket, run_id=run_id)
+            S3Uploader(
+                bucket=s3_bucket,
+                run_id=run_id,
+                owner_dag_run_id=AIRFLOW_DAG_RUN_ID or None,
+                target_subcategories=[f"{m}/{s}" for m, subs in target_categories.items() for s in subs],
+            )
             if s3_bucket else None
         )
 
@@ -175,27 +208,57 @@ async def run_crawl(
         success = True
         nav_failures: list[tuple[str, str]] = []
         category_counts: dict[str, int] = {}
+        failures: dict[str, str] = {}
+        manifest: dict | None = None
 
         try:
-            all_products, success, nav_failures, category_counts = await _crawl_categories(fetcher, browser, target_categories)
+            all_products, success, nav_failures, category_counts = await _crawl_categories(
+                fetcher, browser, target_categories, failures
+            )
+        except BaseException:
+            success = False  # 예외 종료가 manifest에 completed로 남지 않게
+            raise
         finally:
             await browser.close()
             if s3:
-                s3.finalize(success=success)
+                s3.set_failed_subcategories(failures)
+                manifest = s3.finalize(success=success)
 
-        # 정합성 메트릭 — 수집 안정성 + 적재 보존(crawl쪽)
-        categories_total = sum(len(subs) for subs in target_categories.values())
-        metrics = dict(
-            products_total=len(all_products),
-            categories_total=categories_total,
-            categories_failed=len(nav_failures),
-            categories_zero=sum(1 for c in category_counts.values() if c == 0),
-        )
-        # 로그(Loki) + 테이블(dq_metrics) 이중 기록, 같은 수치
-        log_dq(logger, stage="crawl", run_id=run_id, **metrics)
-        _write_crawl_dq(BATCH_DATE, run_id, **metrics)
+        # 정합성 메트릭 — S3 사용 시 manifest(run 누적) 기준, 재개해도 값이 같다
+        if s3 and manifest is not None:
+            try:
+                metrics = summarize_crawl(manifest, target_categories)
+            except Exception as e:
+                # 지표 실패가 크롤 성공·전처리 트리거를 막지 않게(비치명)
+                logger.warning("crawl DQ 지표 계산 실패(건너뜀): %s", e)
+                metrics = None
+        else:
+            categories_total = sum(len(subs) for subs in target_categories.values())
+            metrics = dict(
+                products_total=len(all_products),
+                categories_total=categories_total,
+                categories_failed=len(nav_failures),
+                categories_zero=sum(1 for c in category_counts.values() if c == 0),
+            )
+
+        if metrics is not None:
+            if CRAWL_TRY_NUMBER:
+                metrics["crawl_attempt"] = CRAWL_TRY_NUMBER
+            # 로그(Loki) + 테이블(dq_metrics) 이중 기록, 같은 수치
+            log_dq(logger, stage="crawl", run_id=run_id, **metrics)
+            _write_crawl_dq(BATCH_DATE, run_id, **metrics)
 
         return all_products
+
+
+def _assert_run_owner(s3_bucket: str, run_id: str) -> None:
+    """같은 run_id(날짜) manifest를 다른 dagRun이 이어 쓰려 하면 수집 전에 실패시킨다."""
+    if not AIRFLOW_DAG_RUN_ID:
+        return
+    ok, reason = check_run_owner(load_manifest(s3_bucket, run_id), AIRFLOW_DAG_RUN_ID)
+    logger.info("run 소유자 판정: run_id=%s, %s", run_id, reason)
+    if not ok:
+        raise RuntimeError(f"같은 날짜 중복 실행 차단(run_id={run_id}): {reason}")
 
 
 def _main_impl():

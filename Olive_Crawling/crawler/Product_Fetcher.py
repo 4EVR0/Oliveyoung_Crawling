@@ -46,6 +46,8 @@ class ProductFetcher:
             return []
 
         product_urls = await self._get_product_urls(main_cat, sub_cat)
+        if self.s3:
+            self.s3.set_expected_urls(main_cat, sub_cat, len(product_urls))
         if not product_urls:
             logger.warning("수집할 URL 없음: %s > %s", main_cat, sub_cat)
             return []
@@ -79,6 +81,7 @@ class ProductFetcher:
 
         self.checkpoint.mark_subcategory_done(main_cat, sub_cat)
         if self.s3:
+            self.s3.mark_subcategory_complete(main_cat, sub_cat)
             self.s3.save_manifest_checkpoint()
 
         logger.info("'%s > %s' 완료 — 총 %d개", main_cat, sub_cat, len(all_products))

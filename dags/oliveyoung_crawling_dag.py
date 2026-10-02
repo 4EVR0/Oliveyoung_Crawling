@@ -13,6 +13,7 @@ with DAG(
     schedule="0 2 */3 * *",
     start_date=datetime(2026, 1, 1),
     catchup=False,
+    max_active_runs=1,  # 크롤 동시 실행 방지(월말 */3 연속 실행 등)
     default_args={"retries": 1, "retry_delay": timedelta(minutes=10)},
     tags=["oliveyoung", "crawling"],
 ) as dag:
@@ -31,6 +32,8 @@ with DAG(
             "S3_BUCKET": S3_BUCKET,
             "RUN_ID": "{{ ds_nodash }}",
             "BATCH_DATE": "{{ data_interval_end | ds }}",
+            "AIRFLOW_DAG_RUN_ID": "{{ run_id }}",         # 같은 날짜 다른 dagRun 차단용 manifest 소유자
+            "CRAWL_TRY_NUMBER": "{{ ti.try_number }}",    # 재개 여부 DQ(crawl_attempt)
             "AWS_DEFAULT_REGION": "ap-northeast-2",
             "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID", ""),
             "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
